@@ -1097,6 +1097,7 @@ public:
     case llvm::Intrinsic::instrprof_increment_step:
     case llvm::Intrinsic::instrprof_value_profile:
     case llvm::Intrinsic::prefetch:
+    case llvm::Intrinsic::experimental_noalias_scope_decl:
       return NOP(i);
 
     default:
@@ -1202,6 +1203,9 @@ public:
       case LLVMContext::MD_loop:
       case LLVMContext::MD_prof:
       case LLVMContext::MD_unpredictable:
+      case LLVMContext::MD_noalias:
+      case LLVMContext::MD_tbaa_struct:
+      case LLVMContext::MD_alias_scope:
         break;
 
       default:
