@@ -77,6 +77,7 @@ public:
   std::vector<Value*> operands() const override;
   bool propagatesPoison() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* opToString() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -113,7 +114,7 @@ public:
 class FpUnaryOp final : public Instr {
 public:
   enum Op {
-    FAbs, FNeg, Ceil, Floor, RInt, NearbyInt, Round, RoundEven, Trunc, Sqrt
+    FAbs, FNeg, Ceil, Floor, RInt, NearbyInt, Round, RoundEven, Trunc, Sqrt, Log2, Exp2
   };
 
 private:
@@ -133,6 +134,7 @@ public:
   std::vector<Value*> operands() const override;
   bool propagatesPoison() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* opToString() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;

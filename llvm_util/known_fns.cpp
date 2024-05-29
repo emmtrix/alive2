@@ -203,6 +203,16 @@ known_call(llvm::CallInst &i, const llvm::TargetLibraryInfo &TLI,
     BB.addInstr(make_unique<Assume>(*args[0], Assume::WellDefined));
     RETURN_VAL(make_unique<FpUnaryOp>(*ty, value_name(i), *args[0],
                                       FpUnaryOp::Sqrt, parse_fmath(i)));
+  
+  case llvm::LibFunc_log2:
+  case llvm::LibFunc_log2f:
+    RETURN_VAL(make_unique<FpUnaryOp>(*ty, value_name(i), *args[0],
+                                      FpUnaryOp::Log2, parse_fmath(i)));
+
+  case llvm::LibFunc_exp2:
+  case llvm::LibFunc_exp2f:
+    RETURN_VAL(make_unique<FpUnaryOp>(*ty, value_name(i), *args[0],
+                                      FpUnaryOp::Exp2, parse_fmath(i)));
 
   case llvm::LibFunc_fwrite: {
     auto size = getInt(*args[1]);

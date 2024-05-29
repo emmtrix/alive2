@@ -9,6 +9,7 @@
 #include "smt/exprs.h"
 #include "smt/solver.h"
 #include "util/compiler.h"
+#include "util/config.h"
 #include <functional>
 #include <numeric>
 #include <sstream>
@@ -585,21 +586,24 @@ void FpBinOp::rauw(const Value &what, Value &with) {
   RAUW(rhs);
 }
 
-void FpBinOp::print(ostream &os) const {
-  const char *str = nullptr;
+const char* FpBinOp::opToString() const {
   switch (op) {
-  case FAdd:     str = "fadd "; break;
-  case FSub:     str = "fsub "; break;
-  case FMul:     str = "fmul "; break;
-  case FDiv:     str = "fdiv "; break;
-  case FRem:     str = "frem "; break;
-  case FMax:     str = "fmax "; break;
-  case FMin:     str = "fmin "; break;
-  case FMaximum: str = "fmaximum "; break;
-  case FMinimum: str = "fminimum "; break;
-  case CopySign: str = "copysign "; break;
+  case FAdd:     return "fadd"; break;
+  case FSub:     return "fsub"; break;
+  case FMul:     return "fmul"; break;
+  case FDiv:     return "fdiv"; break;
+  case FRem:     return "frem"; break;
+  case FMax:     return "fmax"; break;
+  case FMin:     return "fmin"; break;
+  case FMaximum: return "fmaximum"; break;
+  case FMinimum: return "fminimum"; break;
+  case CopySign: return "copysign"; break;
   }
-  os << getName() << " = " << str << fmath << *lhs << ", " << rhs->getName();
+  return nullptr;
+}
+
+void FpBinOp::print(ostream &os) const {
+  os << getName() << " = " << opToString() << ' ' << fmath << *lhs << ", " << rhs->getName();
   if (!rm.isDefault())
     os << ", rounding=" << rm;
   os << ", exceptions=" << ex;
@@ -735,98 +739,106 @@ StateValue FpBinOp::toSMT(State &s) const {
   function<StateValue(const expr&, const expr&, const expr&, const expr&,
                       FpRoundingMode)> fn;
 
-  switch (op) {
-  case FAdd:
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions) {
     fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
       return fm_poison(s, a, ap, b, bp,
-                       [&](expr &a, expr &b) { return a.fadd(b, rm.toSMT()); },
-                       fmath, false);
+                      [&](expr &a, expr &b) { return expr::mkUF(opToString(), {a, b}, a); },
+                      fmath, false);
     };
-    break;
-
-  case FSub:
-    fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
-      return fm_poison(s, a, ap, b, bp,
-                       [&](expr &a, expr &b) { return a.fsub(b, rm.toSMT()); },
-                       fmath, false);
-    };
-    break;
-
-  case FMul:
-    fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
-      return fm_poison(s, a, ap, b, bp,
-                       [&](expr &a, expr &b) { return a.fmul(b, rm.toSMT()); },
-                       fmath, false);
-    };
-    break;
-
-  case FDiv:
-    fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
-      return fm_poison(s, a, ap, b, bp,
-                       [&](expr &a, expr &b) { return a.fdiv(b, rm.toSMT()); },
-                       fmath, false);
-    };
-    break;
-
-  case FRem:
-    fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
-      // TODO; Z3 has no support for LLVM's frem which is actually an fmod
-      return fm_poison(s, a, ap, b, bp,
-                       [&](expr &a, expr &b) {
-                         auto val = expr::mkUF("fmod", {a, b}, a);
-                         s.doesApproximation("frem", val);
-                         return val;
-                       },
-                       fmath, false);
-    };
-    break;
-
-  case FMin:
-  case FMax:
-    fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
-      expr ndet = expr::mkFreshVar("maxminnondet", true);
-      s.addQuantVar(ndet);
-      auto ndz = expr::mkIf(ndet, expr::mkNumber("0", a),
-                            expr::mkNumber("-0", a));
-
-      auto v = [&](expr &a, expr &b) {
-        expr z = a.isFPZero() && b.isFPZero();
-        expr cmp = op == FMin ? a.fole(b) : a.foge(b);
-        return expr::mkIf(a.isNaN(), b,
-                          expr::mkIf(b.isNaN(), a,
-                                     expr::mkIf(z, ndz,
-                                                expr::mkIf(cmp, a, b))));
+  } else {
+    switch (op) {
+    case FAdd:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        return fm_poison(s, a, ap, b, bp,
+                        [&](expr &a, expr &b) { return a.fadd(b, rm.toSMT()); },
+                        fmath, false);
       };
-      return fm_poison(s, a, ap, b, bp, v, fmath, false);
-    };
-    break;
+      break;
 
-  case FMinimum:
-  case FMaximum:
-    fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
-      auto v = [&](expr &a, expr &b) {
-        expr zpos = expr::mkNumber("0", a), zneg = expr::mkNumber("-0", a);
-        expr cmp = (op == FMinimum) ? a.fole(b) : a.foge(b);
-        expr neg_cond = op == FMinimum ? (a.isFPNegative() || b.isFPNegative())
-                                       : (a.isFPNegative() && b.isFPNegative());
-        expr e = expr::mkIf(a.isFPZero() && b.isFPZero(),
-                            expr::mkIf(neg_cond, zneg, zpos),
-                            expr::mkIf(cmp, a, b));
-
-        return expr::mkIf(a.isNaN(), a, expr::mkIf(b.isNaN(), b, e));
+    case FSub:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        return fm_poison(s, a, ap, b, bp,
+                        [&](expr &a, expr &b) { return a.fsub(b, rm.toSMT()); },
+                        fmath, false);
       };
-      return fm_poison(s, a, ap, b, bp, v, fmath, false);
-    };
-    break;
-  case CopySign:
-    fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
-      return fm_poison(s, a, ap, b, bp,
-                       [](expr &a, expr &b) {
-                         return expr::mkIf(a.isFPNegative() == b.isFPNegative(),
-                                           a, a.fneg()); },
-                       fmath, false);
-    };
-    break;
+      break;
+
+    case FMul:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        return fm_poison(s, a, ap, b, bp,
+                        [&](expr &a, expr &b) { return a.fmul(b, rm.toSMT()); },
+                        fmath, false);
+      };
+      break;
+
+    case FDiv:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        return fm_poison(s, a, ap, b, bp,
+                        [&](expr &a, expr &b) { return a.fdiv(b, rm.toSMT()); },
+                        fmath, false);
+      };
+      break;
+
+    case FRem:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        // TODO; Z3 has no support for LLVM's frem which is actually an fmod
+        return fm_poison(s, a, ap, b, bp,
+                        [&](expr &a, expr &b) {
+                          auto val = expr::mkUF("fmod", {a, b}, a);
+                          s.doesApproximation("frem", val);
+                          return val;
+                        },
+                        fmath, false);
+      };
+      break;
+
+    case FMin:
+    case FMax:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        expr ndet = expr::mkFreshVar("maxminnondet", true);
+        s.addQuantVar(ndet);
+        auto ndz = expr::mkIf(ndet, expr::mkNumber("0", a),
+                              expr::mkNumber("-0", a));
+
+        auto v = [&](expr &a, expr &b) {
+          expr z = a.isFPZero() && b.isFPZero();
+          expr cmp = op == FMin ? a.fole(b) : a.foge(b);
+          return expr::mkIf(a.isNaN(), b,
+                            expr::mkIf(b.isNaN(), a,
+                                      expr::mkIf(z, ndz,
+                                                  expr::mkIf(cmp, a, b))));
+        };
+        return fm_poison(s, a, ap, b, bp, v, fmath, false);
+      };
+      break;
+
+    case FMinimum:
+    case FMaximum:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        auto v = [&](expr &a, expr &b) {
+          expr zpos = expr::mkNumber("0", a), zneg = expr::mkNumber("-0", a);
+          expr cmp = (op == FMinimum) ? a.fole(b) : a.foge(b);
+          expr neg_cond = op == FMinimum ? (a.isFPNegative() || b.isFPNegative())
+                                        : (a.isFPNegative() && b.isFPNegative());
+          expr e = expr::mkIf(a.isFPZero() && b.isFPZero(),
+                              expr::mkIf(neg_cond, zneg, zpos),
+                              expr::mkIf(cmp, a, b));
+
+          return expr::mkIf(a.isNaN(), a, expr::mkIf(b.isNaN(), b, e));
+        };
+        return fm_poison(s, a, ap, b, bp, v, fmath, false);
+      };
+      break;
+    case CopySign:
+      fn = [&](auto &a, auto &ap, auto &b, auto &bp, auto rm) -> StateValue {
+        return fm_poison(s, a, ap, b, bp,
+                        [](expr &a, expr &b) {
+                          return expr::mkIf(a.isFPNegative() == b.isFPNegative(),
+                                            a, a.fneg()); },
+                        fmath, false);
+      };
+      break;
+    }
   }
 
   auto scalar = [&](const auto &a, const auto &b) {
@@ -984,22 +996,26 @@ void FpUnaryOp::rauw(const Value &what, Value &with) {
   RAUW(val);
 }
 
-void FpUnaryOp::print(ostream &os) const {
-  const char *str = nullptr;
+const char* FpUnaryOp::opToString() const {
   switch (op) {
-  case FAbs:      str = "fabs "; break;
-  case FNeg:      str = "fneg "; break;
-  case Ceil:      str = "ceil "; break;
-  case Floor:     str = "floor "; break;
-  case RInt:      str = "rint "; break;
-  case NearbyInt: str = "nearbyint "; break;
-  case Round:     str = "round "; break;
-  case RoundEven: str = "roundeven "; break;
-  case Trunc:     str = "trunc "; break;
-  case Sqrt:      str = "sqrt "; break;
+  case FAbs:      return "fabs"; break;
+  case FNeg:      return "fneg"; break;
+  case Ceil:      return "ceil"; break;
+  case Floor:     return "floor"; break;
+  case RInt:      return "rint"; break;
+  case NearbyInt: return "nearbyint"; break;
+  case Round:     return "round"; break;
+  case RoundEven: return "roundeven"; break;
+  case Trunc:     return "trunc"; break;
+  case Sqrt:      return "sqrt"; break;
+  case Log2:      return "log2"; break;
+  case Exp2:      return "exp2"; break;
   }
+  return nullptr;
+}
 
-  os << getName() << " = " << str << fmath << *val;
+void FpUnaryOp::print(ostream &os) const {
+  os << getName() << " = " << opToString() << ' ' << fmath << *val;
   if (!rm.isDefault())
     os << ", rounding=" << rm;
   os << ", exceptions=" << ex;
@@ -1008,60 +1024,66 @@ void FpUnaryOp::print(ostream &os) const {
 StateValue FpUnaryOp::toSMT(State &s) const {
   function<StateValue(const expr&, const expr&, FpRoundingMode)> fn;
 
-  switch (op) {
-  case FAbs:
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions) {
     fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [](expr &v) { return v.fabs(); }, fmath, true);
+      return fm_poison(s, v, np, [&](expr &v) { return expr::mkUF(opToString(), {v}, v); }, fmath, true);
     };
-    break;
-  case FNeg:
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [](expr &v){ return v.fneg(); }, fmath, false);
-    };
-    break;
-  case Ceil:
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [](expr &v) { return v.ceil(); }, fmath, true);
-    };
-    break;
-  case Floor:
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [](expr &v) { return v.floor(); }, fmath,
-                       true);
-    };
-    break;
-  case RInt:
-  case NearbyInt:
-    // TODO: they differ in exception behavior
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [&](expr &v) { return v.round(rm.toSMT()); },
-                       fmath, true);
-    };
-    break;
-  case Round:
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [](expr &v) { return v.round(expr::rna()); },
-                       fmath, true);
-    };
-    break;
-  case RoundEven:
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [](expr &v) { return v.round(expr::rne()); },
-                       fmath, true);
-    };
-    break;
-  case Trunc:
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [](expr &v) { return v.round(expr::rtz()); },
-                       fmath, true);
-    };
-    break;
-  case Sqrt:
-    fn = [&](auto &v, auto &np, auto rm) -> StateValue {
-      return fm_poison(s, v, np, [&](expr &v){ return v.sqrt(rm.toSMT()); },
-                       fmath, false);
-    };
-    break;
+  } else {
+    switch (op) {
+    case FAbs:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [](expr &v) { return v.fabs(); }, fmath, true);
+      };
+      break;
+    case FNeg:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [](expr &v){ return v.fneg(); }, fmath, false);
+      };
+      break;
+    case Ceil:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [](expr &v) { return v.ceil(); }, fmath, true);
+      };
+      break;
+    case Floor:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [](expr &v) { return v.floor(); }, fmath,
+                        true);
+      };
+      break;
+    case RInt:
+    case NearbyInt:
+      // TODO: they differ in exception behavior
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [&](expr &v) { return v.round(rm.toSMT()); },
+                        fmath, true);
+      };
+      break;
+    case Round:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [](expr &v) { return v.round(expr::rna()); },
+                        fmath, true);
+      };
+      break;
+    case RoundEven:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [](expr &v) { return v.round(expr::rne()); },
+                        fmath, true);
+      };
+      break;
+    case Trunc:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [](expr &v) { return v.round(expr::rtz()); },
+                        fmath, true);
+      };
+      break;
+    case Sqrt:
+      fn = [&](auto &v, auto &np, auto rm) -> StateValue {
+        return fm_poison(s, v, np, [&](expr &v){ return v.sqrt(rm.toSMT()); },
+                        fmath, false);
+      };
+      break;
+    }
   }
 
   auto scalar = [&](const StateValue &v) {

@@ -4,6 +4,7 @@
 #include "ir/constant.h"
 #include "smt/expr.h"
 #include "util/compiler.h"
+#include "util/config.h"
 #include <cassert>
 
 using namespace smt;
@@ -52,24 +53,27 @@ expr FloatConst::getTypeConstraints() const {
 }
 
 StateValue FloatConst::toSMT(State &s) const {
-  if (auto n = get_if<string>(&val)) {
-    if (!bit_value)
-      return { expr::mkNumber(n->c_str(), getType().getDummyValue(true).value),
-               true };
-    return { expr::mkNumber(n->c_str(), expr::mkUInt(0, getType().bits()))
-               .BV2float(getType().getDummyValue(true).value),
-             true };
-  }
-
   expr e;
-  double v = get<double>(val);
-  switch (getType().getAsFloatType()->getFpType()) {
-  case FloatType::Half:    e = expr::mkHalf((float)v); break;
-  case FloatType::Float:   e = expr::mkFloat((float)v); break;
-  case FloatType::Double:  e = expr::mkDouble(v); break;
-  case FloatType::BFloat:  e = expr::mkBFloat((float)v); break;
-  case FloatType::Quad:
-  case FloatType::Unknown: UNREACHABLE();
+  if (auto n = get_if<string>(&val)) {
+    if (bit_value) {
+      e = expr::mkNumber(n->c_str(), expr::mkUInt(0, getType().bits()))
+               .BV2float(getType().getDummyValue(true).value);
+    } else {
+      e = expr::mkNumber(n->c_str(), getType().getDummyValue(true).value);
+    }
+  } else {
+    double v = get<double>(val);
+    switch (getType().getAsFloatType()->getFpType()) {
+    case FloatType::Half:    e = expr::mkHalf((float)v); break;
+    case FloatType::Float:   e = expr::mkFloat((float)v); break;
+    case FloatType::Double:  e = expr::mkDouble(v); break;
+    case FloatType::BFloat:  e = expr::mkBFloat((float)v); break;
+    case FloatType::Quad:
+    case FloatType::Unknown: UNREACHABLE();
+    }  
+  }
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions) {
+    e = e.float2BV();
   }
   return { std::move(e), true };
 }

@@ -6,8 +6,9 @@ config::src_unroll_cnt = opt_src_unrolling_factor;
 config::tgt_unroll_cnt = opt_tgt_unrolling_factor;
 #else
 config::src_unroll_cnt = opt_unrolling_factor;
-config::src_unroll_cnt = opt_unrolling_factor;
+config::tgt_unroll_cnt = opt_unrolling_factor;
 #endif
+config::fp_mapping_mode = opt_uf_float ? config::FpMappingMode::UninterpretedFunctions : config::FpMappingMode::FloatingPoint;
 config::disable_undef_input = opt_disable_undef;
 config::disable_poison_input = opt_disable_poison;
 config::symexec_print_each_value = opt_se_verbose;

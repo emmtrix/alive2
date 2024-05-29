@@ -6,6 +6,7 @@
 #include "ir/state.h"
 #include "smt/solver.h"
 #include "util/compiler.h"
+#include "util/config.h"
 #include <array>
 #include <cassert>
 #include <numeric>
@@ -411,6 +412,8 @@ StateValue FloatType::toBV(StateValue v) const {
 }
 
 expr FloatType::fromBV(expr e) const {
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions)
+    return e; // We do not use Z3's floating point type
   return e.BV2float(getDummyValue(true).value);
 }
 
@@ -419,6 +422,9 @@ StateValue FloatType::fromBV(StateValue v) const {
 }
 
 expr FloatType::toInt(State &s, expr fp) const {
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions)
+    return fp; // We do not use Z3's floating point type
+  
   expr isnan = fp.isNaN();
   expr val = fp.float2BV();
 

@@ -32,6 +32,10 @@ llvm::cl::opt<unsigned> opt_unrolling_factor(LLVM_ARGS_PREFIX "unroll",
   llvm::cl::init(0), llvm::cl::cat(alive_cmdargs));
 #endif
 
+llvm::cl::opt<bool> opt_uf_float(LLVM_ARGS_PREFIX "uf-float",
+  llvm::cl::desc("Map floating point operations to uninterpreted functions (default=false)"),
+  llvm::cl::init(false), llvm::cl::cat(alive_cmdargs));
+
 llvm::cl::opt<bool> opt_disable_undef(LLVM_ARGS_PREFIX "disable-undef-input",
   llvm::cl::desc("Assume inputs are not undef (default=false)"),
   llvm::cl::init(false), llvm::cl::cat(alive_cmdargs));
