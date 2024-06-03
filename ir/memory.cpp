@@ -889,7 +889,11 @@ vector<Byte> Memory::load(const Pointer &ptr, unsigned bytes, set<expr> &undef,
 
   expr offset = ptr.getShortOffset();
   unsigned off_bits = Pointer::bitsShortOffset();
-
+  
+  for (unsigned i = 0; i < loaded_bytes; ++i) {
+    load_offsets.insert(offset + expr::mkUInt(i, off_bits));
+  }
+  
   auto fn = [&](const MemBlock &blk, unsigned bid, bool local, expr &&cond) {
     bool is_poison = (type & blk.type) == DATA_NONE;
     for (unsigned i = 0; i < loaded_bytes; ++i) {
@@ -952,6 +956,10 @@ void Memory::store(const Pointer &ptr,
   unsigned bytes = data.size() * (bits_byte/8);
   expr offset = ptr.getShortOffset();
   unsigned off_bits = Pointer::bitsShortOffset();
+  
+  for (auto &[idx, val] : data) {
+    store_offsets.insert(offset + expr::mkUInt(idx, off_bits));
+  }
 
   auto stored_ty = data_type(data, false);
   auto stored_ty_full = data_type(data, true);
@@ -2107,6 +2115,12 @@ Memory Memory::mkIf(const expr &cond, const Memory &then, const Memory &els) {
     ret.local_block_val[bid].undef.insert(other.undef.begin(),
                                           other.undef.end());
   }
+  
+  ret.load_offsets = then.load_offsets;
+  ret.load_offsets.insert(els.load_offsets.begin(), els.load_offsets.end());
+  ret.store_offsets = then.store_offsets;
+  ret.store_offsets.insert(els.store_offsets.begin(), els.store_offsets.end());
+  
   ret.non_local_block_liveness = expr::mkIf(cond, then.non_local_block_liveness,
                                             els.non_local_block_liveness);
   ret.local_block_liveness     = expr::mkIf(cond, then.local_block_liveness,

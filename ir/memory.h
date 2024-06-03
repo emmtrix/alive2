@@ -131,6 +131,9 @@ class Memory {
 
   std::vector<MemBlock> non_local_block_val;
   std::vector<MemBlock> local_block_val;
+  
+  std::set<smt::expr> load_offsets;
+  std::set<smt::expr> store_offsets;
 
   smt::expr non_local_block_liveness; // BV w/ 1 bit per bid (1 if live)
   smt::expr local_block_liveness;
@@ -264,6 +267,14 @@ public:
                         bool inaccessiblememonly);
   void setState(const CallState &st, const std::vector<PtrInput> *ptr_inputs,
                 unsigned modifies_bid);
+
+  const std::set<smt::expr> &getLoadOffsets() const {
+    return load_offsets;
+  }
+
+  const std::set<smt::expr> &getStoreOffsets() const {
+    return store_offsets;
+  }
 
   // Allocates a new memory block and returns (pointer expr, allocated).
   // If bid is not specified, it creates a fresh block id by increasing

@@ -382,3 +382,18 @@ static expr mkIf_fold_fn(const expr &cond, T1 &&a, T2 &&b) {
 }
 
 }
+
+template <>
+struct std::hash<smt::expr> {
+  size_t operator()(const smt::expr &expr) const {
+    return expr.hash();
+  }
+};
+
+template <>
+struct std::equal_to<smt::expr> {
+  bool operator()(const smt::expr &a, const smt::expr &b) const {
+    return (a <=> b) == std::strong_ordering::equivalent;
+  }
+};
+

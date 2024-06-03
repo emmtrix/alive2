@@ -437,6 +437,10 @@ check_refinement(Errors &errs, const Transform &t, const State &src_state,
   expr axioms_expr = axioms();
   pre_tgt &= !sink_tgt;
 
+  set<expr> store_offsets = src_state.returnMemory().getStoreOffsets();
+  set<expr> tgt_store_offsets = tgt_state.returnMemory().getStoreOffsets();
+  store_offsets.insert(tgt_store_offsets.begin(), tgt_store_offsets.end());
+
   if (check_expr(axioms_expr && (pre_src && pre_tgt)).isUnsat()) {
     errs.add("Precondition is always false", false);
     return;
@@ -539,9 +543,21 @@ check_refinement(Errors &errs, const Transform &t, const State &src_state,
       << "\nTarget value: " << Byte(tgt_mem, m[tgt_mem.raw_load(p, undef)()]);
   };
 
+  OrExpr refinement_offsets;
+
+  std::cout << "Checking memory..." << std::endl;
+  for (const expr &offset : store_offsets) {     
+    std::cout << "Store Offset: " << offset << std::endl;
+    refinement_offsets.add(offset == ptr_refinement.getShortOffset());
+  }
+
+  axioms_expr = axioms_expr && refinement_offsets();
+
   CHECK(dom && !(memory_cnstr0.isTrue() ? memory_cnstr0
                                         : value_cnstr && memory_cnstr0),
         print_ptr_load, "Mismatch in memory");
+
+  std::cout << "Finished checking memory" << std::endl;
 
 #undef CHECK
 }
