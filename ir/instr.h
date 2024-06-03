@@ -768,6 +768,34 @@ public:
 };
 
 
+class CondStore final : public MemInstr {
+  Value *ptr, *val, *cond;
+  uint64_t align;
+public:
+  CondStore(Value &ptr, Value &val, Value &cond, uint64_t align)
+    : MemInstr(Type::voidTy, "condstore"), ptr(&ptr), val(&val), cond(&cond), align(align) {}
+
+  Value& getValue() const { return *val; }
+  Value& getPtr() const { return *ptr; }
+  Value& getCond() const { return *cond; }
+  uint64_t getAlign() const { return align; }
+
+  std::pair<uint64_t, unsigned> getMaxAllocSize() const override;
+  uint64_t getMaxAccessSize() const override;
+  uint64_t getMaxAccessStride() const;
+  uint64_t getMaxGEPOffset() const override;
+  bool canFree() const override;
+  ByteAccessInfo getByteAccessInfo() const override;
+
+  std::vector<Value*> operands() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr> dup(const std::string &suffix) const override;
+};
+
+
 class Store final : public MemInstr {
   Value *ptr, *val;
   uint64_t align;

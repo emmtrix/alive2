@@ -3458,6 +3458,50 @@ unique_ptr<Instr> Store::dup(const string &suffix) const {
   return make_unique<Store>(*ptr, *val, align);
 }
 
+DEFINE_AS_RETZEROALIGN(CondStore, getMaxAllocSize);
+DEFINE_AS_RETZERO(CondStore, getMaxGEPOffset);
+DEFINE_AS_RETFALSE(CondStore, canFree);
+
+uint64_t CondStore::getMaxAccessSize() const {
+  return Memory::getStoreByteSize(val->getType());
+}
+
+CondStore::ByteAccessInfo CondStore::getByteAccessInfo() const {
+  return ByteAccessInfo::get(val->getType(), true, align);
+}
+
+vector<Value*> CondStore::operands() const {
+  return { val, ptr, cond };
+}
+
+void CondStore::rauw(const Value &what, Value &with) {
+  RAUW(val);
+  RAUW(ptr);
+  RAUW(cond);
+}
+
+void CondStore::print(ostream &os) const {
+  os << "condstore " << *val << ", " << *ptr << ", if " << *cond << ", align " << align;
+}
+
+StateValue CondStore::toSMT(State &s) const {
+  auto &c = s[*cond];
+  s.addAxiom(c.non_poison);
+  auto &p = s.getAndAddPoisonUB(*ptr, true).value;
+  check_can_store(s, p);
+  auto &v = s[*val];
+  s.getMemory().store(p, v, val->getType(), align, s.getUndefVars(), c.value != 0);
+  return {};
+}
+
+expr CondStore::getTypeConstraints(const Function &f) const {
+  return ptr->getType().enforcePtrType();
+}
+
+unique_ptr<Instr> CondStore::dup(const string &suffix) const {
+  return make_unique<CondStore>(*ptr, *val, *cond, align);
+}
+
 
 DEFINE_AS_RETZEROALIGN(Memset, getMaxAllocSize);
 DEFINE_AS_RETZERO(Memset, getMaxGEPOffset);

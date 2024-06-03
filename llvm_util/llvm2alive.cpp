@@ -294,9 +294,14 @@ public:
     auto ty = llvm_type2alive(i.getType());
     if (!ty)
       return error(i);
-
+    
     unique_ptr<FnCall> call;
     auto fn = i.getCalledFunction();
+
+    if (fn && fn->getName().startswith("__emx_cond_store_")) {
+      uint64_t align = DL().getABITypeAlignment(i.getArgOperand(1)->getType());;
+      RETURN_IDENTIFIER(make_unique<CondStore>(*args[0], *args[1], *args[2], align));
+    }
 
     if (auto *iasm = dyn_cast<llvm::InlineAsm>(i.getCalledOperand())) {
       assert(!approx);
