@@ -398,6 +398,7 @@ void solver_init() {
     "simplify",
     "propagate-values",
     "simplify",
+    "solve-eqs",
     "elim-uncnstr",
     "qe-light",
     "simplify",
@@ -405,6 +406,8 @@ void solver_init() {
     "reduce-args",
     "qe-light",
     "simplify",
+    "max-bv-sharing",
+    "ackermannize_bv",
     "smt"
   });
 }
