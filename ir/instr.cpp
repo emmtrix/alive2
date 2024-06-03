@@ -1270,14 +1270,16 @@ void FpTernaryOp::rauw(const Value &what, Value &with) {
   RAUW(c);
 }
 
-void FpTernaryOp::print(ostream &os) const {
-  const char *str = nullptr;
+const char* FpTernaryOp::opToString() const {
   switch (op) {
-  case FMA:    str = "fma "; break;
-  case MulAdd: str = "fmuladd "; break;
+  case FMA:    return "fma"; break;
+  case MulAdd: return "fmuladd"; break;
   }
+  return nullptr;
+}
 
-  os << getName() << " = " << str << fmath << *a << ", " << *b << ", " << *c;
+void FpTernaryOp::print(ostream &os) const {
+  os << getName() << " = " << opToString() << ' ' << fmath << *a << ", " << *b << ", " << *c;
   if (!rm.isDefault())
     os << ", rounding=" << rm;
   os << ", exceptions=" << ex;
@@ -1290,27 +1292,36 @@ StateValue FpTernaryOp::toSMT(State &s) const {
   function<StateValue(const StateValue&, const StateValue&, const StateValue&,
                       FpRoundingMode)> fn;
 
-  switch (op) {
-  case FMA:
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions) {
     fn = [&](auto &a, auto &b, auto &c, auto rm) -> StateValue {
       return fm_poison(s, a.value, a.non_poison, b.value, b.non_poison, c.value,
-                       c.non_poison, [&](expr &a, expr &b, expr &c) {
-                         return expr::fma(a, b, c, rm.toSMT());
-                       }, fmath, false);
+                      c.non_poison, [&](expr &a, expr &b, expr &c) {
+                        return expr::mkUF(opToString(), {a, b, c}, a);
+                      }, fmath, false);
     };
-    break;
-  case MulAdd:
-    fn = [&](auto &a, auto &b, auto &c, auto rm0) -> StateValue {
-      auto rm = rm0.toSMT();
-      expr var = expr::mkFreshVar("nondet", expr(false));
-      s.addQuantVar(var);
-      return fm_poison(s, a.value, a.non_poison, b.value, b.non_poison, c.value,
-                       c.non_poison, [&](expr &a, expr &b, expr &c) {
-                         return expr::mkIf(var, expr::fma(a, b, c, rm),
-                                           a.fmul(b, rm).fadd(c, rm));
-                       }, fmath, false);
-    };
-    break;
+  } else {
+    switch (op) {
+    case FMA:
+      fn = [&](auto &a, auto &b, auto &c, auto rm) -> StateValue {
+        return fm_poison(s, a.value, a.non_poison, b.value, b.non_poison, c.value,
+                        c.non_poison, [&](expr &a, expr &b, expr &c) {
+                          return expr::fma(a, b, c, rm.toSMT());
+                        }, fmath, false);
+      };
+      break;
+    case MulAdd:
+      fn = [&](auto &a, auto &b, auto &c, auto rm0) -> StateValue {
+        auto rm = rm0.toSMT();
+        expr var = expr::mkFreshVar("nondet", expr(false));
+        s.addQuantVar(var);
+        return fm_poison(s, a.value, a.non_poison, b.value, b.non_poison, c.value,
+                        c.non_poison, [&](expr &a, expr &b, expr &c) {
+                          return expr::mkIf(var, expr::fma(a, b, c, rm),
+                                            a.fmul(b, rm).fadd(c, rm));
+                        }, fmath, false);
+      };
+      break;
+    }
   }
 
   auto scalar = [&](const StateValue &a, const StateValue &b,
@@ -1498,20 +1509,22 @@ void FpConversionOp::rauw(const Value &what, Value &with) {
   RAUW(val);
 }
 
-void FpConversionOp::print(ostream &os) const {
-  const char *str = nullptr;
+const char* FpConversionOp::opToString() const {
   switch (op) {
-  case SIntToFP: str = "sitofp "; break;
-  case UIntToFP: str = "uitofp "; break;
-  case FPToSInt: str = "fptosi "; break;
-  case FPToUInt: str = "fptoui "; break;
-  case FPExt:    str = "fpext "; break;
-  case FPTrunc:  str = "fptrunc "; break;
-  case LRInt:    str = "lrint "; break;
-  case LRound:   str = "lround "; break;
+  case SIntToFP: return "sitofp"; break;
+  case UIntToFP: return "uitofp"; break;
+  case FPToSInt: return "fptosi"; break;
+  case FPToUInt: return "fptoui"; break;
+  case FPExt:    return "fpext"; break;
+  case FPTrunc:  return "fptrunc"; break;
+  case LRInt:    return "lrint"; break;
+  case LRound:   return "lround"; break;
   }
+  return nullptr;
+}
 
-  os << getName() << " = " << str << *val << print_type(getType(), " to ", "");
+void FpConversionOp::print(ostream &os) const {
+  os << getName() << " = " << opToString() << ' ' << *val << print_type(getType(), " to ", "");
   if (!rm.isDefault())
     os << ", rounding=" << rm;
   os << ", exceptions=" << ex;
@@ -1521,60 +1534,66 @@ StateValue FpConversionOp::toSMT(State &s) const {
   auto &v = s[*val];
   function<StateValue(const expr &, const Type &, FpRoundingMode)> fn;
 
-  switch (op) {
-  case SIntToFP:
-    fn = [](auto &val, auto &to_type, auto rm) -> StateValue {
-      return
-        { val.sint2fp(to_type.getDummyValue(false).value, rm.toSMT()), true };
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions) {
+    fn = [&](auto &val, auto &to_type, auto rm) -> StateValue {
+      return { expr::mkUF(opToString(), {val}, to_type.getDummyValue(false).value), true };
     };
-    break;
-  case UIntToFP:
-    fn = [](auto &val, auto &to_type, auto rm) -> StateValue {
-      return
-        { val.uint2fp(to_type.getDummyValue(false).value, rm.toSMT()), true };
-    };
-    break;
-  case FPToSInt:
-  case LRInt:
-  case LRound:
-    fn = [&](auto &val, auto &to_type, auto rm_in) -> StateValue {
-      expr rm;
-      switch (op) {
-      case FPToSInt:
-        rm = expr::rtz();
-        break;
-      case LRInt:
-        rm = rm_in.toSMT();
-        break;
-      case LRound:
-        rm = expr::rna();
-        break;
-      default: UNREACHABLE();
-      }
-      expr bv  = val.fp2sint(to_type.bits(), rm);
-      expr fp2 = bv.sint2fp(val, rm);
-      // -0.xx is converted to 0 and then to 0.0, though -0.xx is ok to convert
-      expr val_rounded = val.round(rm);
-      return { std::move(bv), val_rounded.isFPZero() || fp2 == val_rounded };
-    };
-    break;
-  case FPToUInt:
-    fn = [](auto &val, auto &to_type, auto rm_) -> StateValue {
-      expr rm = expr::rtz();
-      expr bv  = val.fp2uint(to_type.bits(), rm);
-      expr fp2 = bv.uint2fp(val, rm);
-      // -0.xx must be converted to 0, not poison.
-      expr val_rounded = val.round(rm);
-      return { std::move(bv), val_rounded.isFPZero() || fp2 == val_rounded };
-    };
-    break;
-  case FPExt:
-  case FPTrunc:
-    fn = [](auto &val, auto &to_type, auto rm) -> StateValue {
-      return { val.float2Float(to_type.getDummyValue(false).value, rm.toSMT()),
-               true };
-    };
-    break;
+  } else {
+    switch (op) {
+    case SIntToFP:
+      fn = [](auto &val, auto &to_type, auto rm) -> StateValue {
+        return
+          { val.sint2fp(to_type.getDummyValue(false).value, rm.toSMT()), true };
+      };
+      break;
+    case UIntToFP:
+      fn = [](auto &val, auto &to_type, auto rm) -> StateValue {
+        return
+          { val.uint2fp(to_type.getDummyValue(false).value, rm.toSMT()), true };
+      };
+      break;
+    case FPToSInt:
+    case LRInt:
+    case LRound:
+      fn = [&](auto &val, auto &to_type, auto rm_in) -> StateValue {
+        expr rm;
+        switch (op) {
+        case FPToSInt:
+          rm = expr::rtz();
+          break;
+        case LRInt:
+          rm = rm_in.toSMT();
+          break;
+        case LRound:
+          rm = expr::rna();
+          break;
+        default: UNREACHABLE();
+        }
+        expr bv  = val.fp2sint(to_type.bits(), rm);
+        expr fp2 = bv.sint2fp(val, rm);
+        // -0.xx is converted to 0 and then to 0.0, though -0.xx is ok to convert
+        expr val_rounded = val.round(rm);
+        return { std::move(bv), val_rounded.isFPZero() || fp2 == val_rounded };
+      };
+      break;
+    case FPToUInt:
+      fn = [](auto &val, auto &to_type, auto rm_) -> StateValue {
+        expr rm = expr::rtz();
+        expr bv  = val.fp2uint(to_type.bits(), rm);
+        expr fp2 = bv.uint2fp(val, rm);
+        // -0.xx must be converted to 0, not poison.
+        expr val_rounded = val.round(rm);
+        return { std::move(bv), val_rounded.isFPZero() || fp2 == val_rounded };
+      };
+      break;
+    case FPExt:
+    case FPTrunc:
+      fn = [](auto &val, auto &to_type, auto rm) -> StateValue {
+        return { val.float2Float(to_type.getDummyValue(false).value, rm.toSMT()),
+                true };
+      };
+      break;
+    }
   }
 
   auto scalar = [&](const StateValue &sv, const Type &to_type) -> StateValue {
@@ -2279,27 +2298,30 @@ void FCmp::rauw(const Value &what, Value &with) {
   RAUW(b);
 }
 
-void FCmp::print(ostream &os) const {
-  const char *condtxt = nullptr;
+const char* FCmp::condToString() const {
   switch (cond) {
-  case OEQ:   condtxt = "oeq "; break;
-  case OGT:   condtxt = "ogt "; break;
-  case OGE:   condtxt = "oge "; break;
-  case OLT:   condtxt = "olt "; break;
-  case OLE:   condtxt = "ole "; break;
-  case ONE:   condtxt = "one "; break;
-  case ORD:   condtxt = "ord "; break;
-  case UEQ:   condtxt = "ueq "; break;
-  case UGT:   condtxt = "ugt "; break;
-  case UGE:   condtxt = "uge "; break;
-  case ULT:   condtxt = "ult "; break;
-  case ULE:   condtxt = "ule "; break;
-  case UNE:   condtxt = "une "; break;
-  case UNO:   condtxt = "uno "; break;
-  case TRUE:  condtxt = "true "; break;
-  case FALSE: condtxt = "false "; break;
+  case OEQ:   return "oeq"; break;
+  case OGT:   return "ogt"; break;
+  case OGE:   return "oge"; break;
+  case OLT:   return "olt"; break;
+  case OLE:   return "ole"; break;
+  case ONE:   return "one"; break;
+  case ORD:   return "ord"; break;
+  case UEQ:   return "ueq"; break;
+  case UGT:   return "ugt"; break;
+  case UGE:   return "uge"; break;
+  case ULT:   return "ult"; break;
+  case ULE:   return "ule"; break;
+  case UNE:   return "une"; break;
+  case UNO:   return "uno"; break;
+  case TRUE:  return "true"; break;
+  case FALSE: return "false"; break;
   }
-  os << getName() << " = fcmp " << fmath << condtxt << *a << ", "
+  return nullptr;
+}
+
+void FCmp::print(ostream &os) const {
+  os << getName() << " = fcmp " << fmath << condToString() << ' ' << *a << ", "
      << b->getName();
 }
 
@@ -2308,27 +2330,35 @@ StateValue FCmp::toSMT(State &s) const {
   auto &b_eval = s[*b];
 
   auto fn = [&](const auto &a, const auto &b) -> StateValue {
-    auto cmp = [&](const expr &a, const expr &b) {
-      switch (cond) {
-      case OEQ: return a.foeq(b);
-      case OGT: return a.fogt(b);
-      case OGE: return a.foge(b);
-      case OLT: return a.folt(b);
-      case OLE: return a.fole(b);
-      case ONE: return a.fone(b);
-      case ORD: return a.ford(b);
-      case UEQ: return a.fueq(b);
-      case UGT: return a.fugt(b);
-      case UGE: return a.fuge(b);
-      case ULT: return a.fult(b);
-      case ULE: return a.fule(b);
-      case UNE: return a.fune(b);
-      case UNO: return a.funo(b);
-      case TRUE:  return expr(true);
-      case FALSE: return expr(false);
-      }
-      UNREACHABLE();
-    };
+    function<expr(const expr &, const expr &)> cmp;
+    if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions) {
+      cmp = [&](const expr &a, const expr &b) {
+        return expr::mkUF(condToString(), {a, b}, expr(true));
+      };
+    } else {
+      cmp = [&](const expr &a, const expr &b) {
+        switch (cond) {
+        case OEQ: return a.foeq(b);
+        case OGT: return a.fogt(b);
+        case OGE: return a.foge(b);
+        case OLT: return a.folt(b);
+        case OLE: return a.fole(b);
+        case ONE: return a.fone(b);
+        case ORD: return a.ford(b);
+        case UEQ: return a.fueq(b);
+        case UGT: return a.fugt(b);
+        case UGE: return a.fuge(b);
+        case ULT: return a.fult(b);
+        case ULE: return a.fule(b);
+        case UNE: return a.fune(b);
+        case UNO: return a.funo(b);
+        case TRUE:  return expr(true);
+        case FALSE: return expr(false);
+        }
+        UNREACHABLE();
+      };
+    }
+    
     auto [val, np] = fm_poison(s, a.value, a.non_poison, b.value, b.non_poison,
                                cmp, fmath, true);
     return { val.toBVBool(), std::move(np) };

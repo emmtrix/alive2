@@ -404,6 +404,8 @@ const FloatType* FloatType::getAsFloatType() const {
 }
 
 expr FloatType::toBV(expr e) const {
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions)
+    return e;
   return e.float2BV();
 }
 
@@ -500,6 +502,9 @@ expr FloatType::sizeVar() const {
 }
 
 StateValue FloatType::getDummyValue(bool non_poison) const {
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions)
+    return { expr::mkUInt(0, bits()), non_poison };
+  
   expr e;
   switch (fpType) {
   case Half:    e = expr::mkHalf(0); break;
@@ -559,6 +564,9 @@ FloatType::refines(const State &src_s, const State &tgt_s,
 
 expr FloatType::mkInput(State &s, const char *name,
                         const ParamAttrs &attrs) const {
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions)
+    return expr::mkVar(name, bits());
+  
   switch (fpType) {
   case Half:    return expr::mkHalfVar(name);
   case Float:   return expr::mkFloatVar(name);
@@ -571,20 +579,24 @@ expr FloatType::mkInput(State &s, const char *name,
 }
 
 void FloatType::printVal(ostream &os, const State &s, const expr &e) const {
-  if (e.isNaN().isTrue()) {
-    os << "NaN";
-    return;
-  }
-  e.float2BV().printHexadecimal(os);
-  os << " (";
-  if (e.isFPZero().isTrue()) {
-    os << (e.isFPNegative().isTrue() ? "-0.0" : "+0.0");
-  } else if (e.isInf().isTrue()) {
-    os << (e.isFPNegative().isTrue() ? "-oo" : "+oo");
+  if (config::fp_mapping_mode == config::FpMappingMode::UninterpretedFunctions) {
+    e.printHexadecimal(os);
   } else {
-    os << e.float2Real().numeral_string();
+    if (e.isNaN().isTrue()) {
+      os << "NaN";
+      return;
+    }
+    e.float2BV().printHexadecimal(os);
+    os << " (";
+    if (e.isFPZero().isTrue()) {
+      os << (e.isFPNegative().isTrue() ? "-0.0" : "+0.0");
+    } else if (e.isInf().isTrue()) {
+      os << (e.isFPNegative().isTrue() ? "-oo" : "+oo");
+    } else {
+      os << e.float2Real().numeral_string();
+    }
+    os << ')';
   }
-  os << ')';
 }
 
 void FloatType::print(ostream &os) const {

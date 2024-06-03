@@ -211,6 +211,7 @@ public:
   std::vector<Value*> operands() const override;
   bool propagatesPoison() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* opToString() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -261,6 +262,7 @@ public:
   std::vector<Value*> operands() const override;
   bool propagatesPoison() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* opToString() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -374,6 +376,7 @@ public:
 
   std::vector<Value*> operands() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* condToString() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
