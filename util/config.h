@@ -33,6 +33,8 @@ enum class FpMappingMode {
 
 extern FpMappingMode fp_mapping_mode;
 
+extern bool separate_store_offsets;
+
 // The maximum number of bits to use for offset computations. Note that this may
 // impact correctness, if values involved in offset computations exceed the
 // maximum.

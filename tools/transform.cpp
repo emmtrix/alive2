@@ -546,17 +546,33 @@ check_refinement(Errors &errs, const Transform &t, const State &src_state,
   OrExpr refinement_offsets;
 
   std::cout << "Checking memory..." << std::endl;
-  for (const expr &offset : store_offsets) {     
-    std::cout << "Store Offset: " << offset << std::endl;
-    refinement_offsets.add(offset == ptr_refinement.getShortOffset());
+  
+  if (config::separate_store_offsets) {
+    expr axioms_expr0 = axioms_expr;
+    size_t index = 0;
+    for (const expr &offset : store_offsets) {     
+      index++;
+      std::cout << "Store Offset (" << index << "/" << store_offsets.size() << "): " << offset << std::endl;
+      
+      axioms_expr = axioms_expr0 && offset == ptr_refinement.getShortOffset();
+  
+      CHECK(dom && !(memory_cnstr0.isTrue() ? memory_cnstr0
+                                            : value_cnstr && memory_cnstr0),
+            print_ptr_load, "Mismatch in memory");
+    }
+  } else {
+    for (const expr &offset : store_offsets) {     
+      std::cout << "Store Offset: " << offset << std::endl;
+      refinement_offsets.add(offset == ptr_refinement.getShortOffset());
+    }
+
+    axioms_expr = axioms_expr && refinement_offsets();
+
+    CHECK(dom && !(memory_cnstr0.isTrue() ? memory_cnstr0
+                                          : value_cnstr && memory_cnstr0),
+          print_ptr_load, "Mismatch in memory");
   }
-
-  axioms_expr = axioms_expr && refinement_offsets();
-
-  CHECK(dom && !(memory_cnstr0.isTrue() ? memory_cnstr0
-                                        : value_cnstr && memory_cnstr0),
-        print_ptr_load, "Mismatch in memory");
-
+  
   std::cout << "Finished checking memory" << std::endl;
 
 #undef CHECK
