@@ -3941,6 +3941,54 @@ unique_ptr<Instr> Load::dup(Function &f, const string &suffix) const {
 }
 
 
+DEFINE_AS_RETZEROALIGN(LoadStrided, getMaxAllocSize);
+DEFINE_AS_RETZERO(LoadStrided, getMaxGEPOffset);
+
+uint64_t LoadStrided::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo LoadStrided::getByteAccessInfo() const {
+  return ByteAccessInfo::get(getType(), false, 1);
+}
+
+vector<Value*> LoadStrided::operands() const {
+  return { ptr, stride };
+}
+
+bool LoadStrided::propagatesPoison() const {
+  return true;
+}
+
+void LoadStrided::rauw(const Value &what, Value &with) {
+  RAUW(ptr);
+  RAUW(stride);
+}
+
+void LoadStrided::print(ostream &os) const {
+  os << getName() << " = load.strided " << getType() << ", " << *ptr
+     << ", stride " << *stride;
+}
+
+StateValue LoadStrided::toSMT(State &s) const {
+  // TODO
+  auto &p = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, p);
+  auto [sv, ub] = s.getMemory().load(p, getType(), 1);
+  s.addUB(std::move(ub));
+  return sv;
+}
+
+expr LoadStrided::getTypeConstraints(const Function &f) const {
+  return Value::getTypeConstraints() &&
+         ptr->getType().enforcePtrType();
+}
+
+unique_ptr<Instr> LoadStrided::dup(Function &f, const string &suffix) const {
+  return make_unique<LoadStrided>(getType(), getName() + suffix, *ptr, *stride);
+}
+
+
 DEFINE_AS_RETZEROALIGN(Store, getMaxAllocSize);
 DEFINE_AS_RETZERO(Store, getMaxGEPOffset);
 
@@ -3993,6 +4041,102 @@ unique_ptr<Instr> Store::dup(Function &f, const string &suffix) const {
   return make_unique<Store>(*ptr, *val, align);
 }
 
+
+DEFINE_AS_RETZEROALIGN(StoreStrided, getMaxAllocSize);
+DEFINE_AS_RETZERO(StoreStrided, getMaxGEPOffset);
+
+uint64_t StoreStrided::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo StoreStrided::getByteAccessInfo() const {
+  return ByteAccessInfo::get(val->getType(), true, 1);
+}
+
+vector<Value*> StoreStrided::operands() const {
+  return { val, ptr, stride, enable };
+}
+
+bool StoreStrided::propagatesPoison() const {
+  return false;
+}
+
+void StoreStrided::rauw(const Value &what, Value &with) {
+  RAUW(val);
+  RAUW(ptr);
+  RAUW(stride);
+  RAUW(enable);
+}
+
+void StoreStrided::print(ostream &os) const {
+  os << "store.strided " << *val << ", " << *ptr << ", stride " << *stride << ", enable " << *enable;
+}
+
+StateValue StoreStrided::toSMT(State &s) const {
+  // TODO
+
+  auto &p = s.getWellDefinedPtr(*ptr);
+  check_can_store(s, p);
+  auto &v = s[*val];
+  s.getMemory().store(p, v, val->getType(), 1, s.getUndefVars());
+  return {};
+}
+
+expr StoreStrided::getTypeConstraints(const Function &f) const {
+  return ptr->getType().enforcePtrType();
+}
+
+unique_ptr<Instr> StoreStrided::dup(Function &f, const string &suffix) const {
+  return make_unique<StoreStrided>(*ptr, *val, *stride, *enable);
+}
+
+
+DEFINE_AS_RETZEROALIGN(Incr, getMaxAllocSize);
+DEFINE_AS_RETZERO(Incr, getMaxGEPOffset);
+
+uint64_t Incr::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo Incr::getByteAccessInfo() const {
+  return ByteAccessInfo::get(getType(), false, 1);
+}
+
+vector<Value*> Incr::operands() const {
+  return { ptr, by };
+}
+
+bool Incr::propagatesPoison() const {
+  return true;
+}
+
+void Incr::rauw(const Value &what, Value &with) {
+  RAUW(ptr);
+  RAUW(by);
+}
+
+void Incr::print(ostream &os) const {
+  os << getName() << " = incr " << getType() << ", " << *ptr
+     << ", " << *by;
+}
+
+StateValue Incr::toSMT(State &s) const {
+  // TODO
+  auto &p = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, p);
+  auto [sv, ub] = s.getMemory().load(p, getType(), 1);
+  s.addUB(std::move(ub));
+  return sv;
+}
+
+expr Incr::getTypeConstraints(const Function &f) const {
+  return Value::getTypeConstraints() &&
+         ptr->getType().enforcePtrType();
+}
+
+unique_ptr<Instr> Incr::dup(Function &f, const string &suffix) const {
+  return make_unique<Incr>(getType(), getName() + suffix, *ptr, *by);
+}
 
 DEFINE_AS_RETZEROALIGN(Memset, getMaxAllocSize);
 DEFINE_AS_RETZERO(Memset, getMaxGEPOffset);

@@ -21,7 +21,10 @@
 #else
 #include "llvm/Support/ModRef.h"
 #endif
+#include "llvm/Demangle/Demangle.h"
+
 #include <sstream>
+#include <iostream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -397,6 +400,30 @@ public:
                llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
                                        { llvm::Type::getInt1Ty(ctx) }, false));
         return make_unique<Assume>(*args.at(0), Assume::AndNonPoison);
+      } else if (fn_decl->getName() == "__emx_incr") {
+        return make_unique<Incr>(*ty, value_name(i), *args.at(0), *args.at(1));
+      }
+
+      llvm::ItaniumPartialDemangler demangler;
+      string name = fn_decl->getName().str();
+      if (!demangler.partialDemangle(name.c_str())) {
+        auto demangled_to_string = [](char* buffer){
+          string str;
+          if (buffer != nullptr) {
+            str = buffer;
+            std::free(buffer);
+          }
+          return str;  
+        };
+
+        string base_name = demangled_to_string(demangler.getFunctionBaseName(nullptr, 0));
+        if (base_name == "__emx_simd_load_strided") {
+          return make_unique<LoadStrided>(*ty, value_name(i), *args.at(0), *args.at(1));
+        } else if (base_name == "__emx_simd_store_strided") {
+          return make_unique<StoreStrided>(*args.at(0), *args.at(1), *args.at(2), *args.at(3));
+        } else if (base_name == "__emx_simd_cond") {
+          return make_unique<Select>(*ty, value_name(i), *args.at(0), *args.at(1), *args.at(2));
+        }
       }
 
       Function::FnDecl decl;
@@ -1263,6 +1290,9 @@ public:
     case llvm::Intrinsic::instrprof_increment_step:
     case llvm::Intrinsic::instrprof_value_profile:
     case llvm::Intrinsic::prefetch:
+    #ifdef LLVM_14 // TODO: Remove
+    case llvm::Intrinsic::experimental_noalias_scope_decl:
+    #endif
       return NOP(i);
 
     default:
@@ -1377,7 +1407,7 @@ public:
       #endif
       case LLVMContext::MD_prof:
       case LLVMContext::MD_unpredictable:
-      #ifndef LLVM_14 // TODO: Remove?
+      #ifdef LLVM_14 // TODO: Remove?
       case LLVMContext::MD_noalias:
       case LLVMContext::MD_tbaa:
       case LLVMContext::MD_tbaa_struct:
