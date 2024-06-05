@@ -937,10 +937,15 @@ public:
 };
 
 class Incr final : public MemInstr {
-  Value *ptr, *by;
 public:
-  Incr(Type &type, std::string &&name, Value &ptr, Value &by)
-    : MemInstr(type, std::move(name)), ptr(&ptr), by(&by) {}
+  enum Flags { None = 0, NSW = 1 << 0, NUW = 1 << 1 };
+private:
+  Value *ptr, *by;
+  uint64_t align;
+  unsigned flags;
+public:
+  Incr(Type &type, std::string &&name, Value &ptr, Value &by, uint64_t align, unsigned flags = None)
+    : MemInstr(type, std::move(name)), ptr(&ptr), by(&by), align(align), flags(flags) {}
 
   Value& getPtr() const { return *ptr; }
   Value& getBy() const { return *by; }

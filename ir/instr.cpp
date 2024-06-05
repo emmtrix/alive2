@@ -4095,11 +4095,11 @@ DEFINE_AS_RETZEROALIGN(Incr, getMaxAllocSize);
 DEFINE_AS_RETZERO(Incr, getMaxGEPOffset);
 
 uint64_t Incr::getMaxAccessSize() const {
-  return UINT64_MAX;
+  return round_up(Memory::getStoreByteSize(getType()), align);
 }
 
 MemInstr::ByteAccessInfo Incr::getByteAccessInfo() const {
-  return ByteAccessInfo::get(getType(), false, 1);
+  return ByteAccessInfo::get(getType(), false, align);
 }
 
 vector<Value*> Incr::operands() const {
@@ -4116,26 +4116,50 @@ void Incr::rauw(const Value &what, Value &with) {
 }
 
 void Incr::print(ostream &os) const {
-  os << getName() << " = incr " << getType() << ", " << *ptr
-     << ", " << *by;
+  os << getName() << " = incr ";
+  
+  if (flags & NSW)
+    os << "nsw ";
+  if (flags & NUW)
+    os << "nuw ";
+  
+  os << ", " << *ptr
+     << ", " << *by << ", align " << align;
 }
 
 StateValue Incr::toSMT(State &s) const {
-  // TODO
   auto &p = s.getWellDefinedPtr(*ptr);
   check_can_load(s, p);
-  auto [sv, ub] = s.getMemory().load(p, getType(), 1);
+  check_can_store(s, p);
+
+  // Load
+  auto [a, ub] = s.getMemory().load(p, getType(), align);
   s.addUB(std::move(ub));
-  return sv;
+
+  // Add
+  auto &b = s[*by];
+  expr non_poison = a.non_poison && b.non_poison;
+  if (flags & NSW)
+    non_poison &= a.value.add_no_soverflow(b.value);
+  if (flags & NUW)
+    non_poison &= a.value.add_no_uoverflow(b.value);
+  StateValue inc = {a.value + b.value, std::move(non_poison)};
+
+  // Store
+  s.getMemory().store(p, inc, getType(), align, s.getUndefVars());
+
+  return a;
 }
 
 expr Incr::getTypeConstraints(const Function &f) const {
   return Value::getTypeConstraints() &&
-         ptr->getType().enforcePtrType();
+         ptr->getType().enforcePtrType() &&
+         by->getType().enforceIntType() &&
+         getType().enforceIntType();
 }
 
 unique_ptr<Instr> Incr::dup(Function &f, const string &suffix) const {
-  return make_unique<Incr>(getType(), getName() + suffix, *ptr, *by);
+  return make_unique<Incr>(getType(), getName() + suffix, *ptr, *by, align, flags);
 }
 
 DEFINE_AS_RETZEROALIGN(Memset, getMaxAllocSize);

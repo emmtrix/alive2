@@ -401,7 +401,7 @@ public:
                                        { llvm::Type::getInt1Ty(ctx) }, false));
         return make_unique<Assume>(*args.at(0), Assume::AndNonPoison);
       } else if (fn_decl->getName() == "__emx_incr") {
-        return make_unique<Incr>(*ty, value_name(i), *args.at(0), *args.at(1));
+        return make_unique<Incr>(*ty, value_name(i), *args.at(0), *args.at(1), 4, Incr::NSW);
       }
 
       llvm::ItaniumPartialDemangler demangler;
