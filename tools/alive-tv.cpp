@@ -21,7 +21,11 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
+#ifdef LLVM_14
+#include "llvm/Support/TargetParser.h"
+#else
 #include "llvm/TargetParser/Triple.h"
+#endif
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include <fstream>
@@ -145,7 +149,7 @@ and "tgt5" will unused.
       if (F1.isDeclaration())
         continue;
       auto SrcFName = F1.getName();
-      if (!SrcFName.starts_with(opt_src_fn))
+      if (!SrcFName.startswith(opt_src_fn))
         continue;
 
       // Check src{+d}/tgt{+d} variant

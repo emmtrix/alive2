@@ -18,7 +18,11 @@
 #include "llvm/Pass.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
+#ifdef LLVM_14
+#include "llvm/Support/TargetParser.h"
+#else
 #include "llvm/TargetParser/Triple.h"
+#endif
 #include <fstream>
 #include <iostream>
 #include <memory>

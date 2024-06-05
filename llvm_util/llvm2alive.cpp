@@ -16,7 +16,11 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Operator.h"
+#ifdef LLVM_14
+#include "llvm/Analysis/AliasAnalysis.h"
+#else
 #include "llvm/Support/ModRef.h"
+#endif
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -31,10 +35,19 @@ using llvm::cast, llvm::dyn_cast, llvm::isa;
 using llvm::LLVMContext;
 
 namespace {
+template <class T>
+bool has_value(const optional<T> &opt) {
+  return opt.has_value();
+}
+
+template <class T>
+bool has_value(const llvm::Optional<T> &opt) {
+  return opt.hasValue();
+}
 
 FpRoundingMode parse_rounding(llvm::Instruction &i) {
   auto *fp = dyn_cast<llvm::ConstrainedFPIntrinsic>(&i);
-  if (!fp || !fp->getRoundingMode().has_value())
+  if (!fp || !has_value(fp->getRoundingMode()))
     return {};
   switch (*fp->getRoundingMode()) {
   case llvm::RoundingMode::Dynamic:           return FpRoundingMode::Dynamic;
@@ -49,7 +62,7 @@ FpRoundingMode parse_rounding(llvm::Instruction &i) {
 
 FpExceptionMode parse_exceptions(llvm::Instruction &i) {
   auto *fp = dyn_cast<llvm::ConstrainedFPIntrinsic>(&i);
-  if (!fp || !fp->getExceptionBehavior().has_value())
+  if (!fp || !has_value(fp->getExceptionBehavior()))
     return {};
   switch (*fp->getExceptionBehavior()) {
   case llvm::fp::ebIgnore:  return FpExceptionMode::Ignore;
@@ -271,10 +284,12 @@ public:
       flags |= BinOp::NUW;
     if (isa<llvm::PossiblyExactOperator>(i) && i.isExact())
       flags = BinOp::Exact;
+    #ifndef LLVM_14
     if (const auto *PDI = dyn_cast<llvm::PossiblyDisjointInst>(&i)) {
       if (PDI->isDisjoint())
         flags |= BinOp::Disjoint;
     }
+    #endif
     return make_unique<BinOp>(*ty, value_name(i), *a, *b, alive_op, flags);
   }
 
@@ -294,10 +309,13 @@ public:
       }
       if (has_non_fp) {
         unsigned flags = 0;
+        #ifndef LLVM_14 
         if (const auto *NNI = dyn_cast<llvm::PossiblyNonNegInst>(&i)) {
           if (NNI->hasNonNeg())
             flags |= ConversionOp::NNEG;
-        } else if (const auto *TI = dyn_cast<llvm::TruncInst>(&i)) {
+        }
+        #endif
+        if (const auto *TI = dyn_cast<llvm::TruncInst>(&i)) {
           if (TI->hasNoUnsignedWrap())
             flags |= ConversionOp::NUW;
           if (TI->hasNoSignedWrap())
@@ -309,10 +327,12 @@ public:
 
     FpConversionOp::Op op;
     unsigned flags = 0;
+    #ifndef LLVM_14
     if (const auto *NNI = dyn_cast<llvm::PossiblyNonNegInst>(&i)) {
       if (NNI->hasNonNeg())
         flags |= FpConversionOp::NNEG;
     }
+    #endif
     switch (i.getOpcode()) {
     case llvm::Instruction::SIToFP:  op = FpConversionOp::SIntToFP; break;
     case llvm::Instruction::UIToFP:  op = FpConversionOp::UIntToFP; break;
@@ -436,7 +456,7 @@ public:
       if (!fn) {
         if (!(fnptr = get_operand(i.getCalledOperand())))
           return error(i);
-      } else if (fn->getName().starts_with("__llvm_profile_"))
+      } else if (fn->getName().startswith("__llvm_profile_"))
         return NOP(i);
 
       call = make_unique<FnCall>(*ty, value_name(i),
@@ -473,6 +493,8 @@ public:
     call->setApproximated(approx);
 
     unique_ptr<Instr> val = std::move(call);
+    
+    #ifndef LLVM_14
     auto range_check = [&](const auto &attr) {
       auto *ptr = val.get();
       BB->addInstr(std::move(val));
@@ -483,6 +505,7 @@ public:
       range_check(fn_decl->getRetAttribute(llvm::Attribute::Range));
     if (i.hasRetAttr(llvm::Attribute::Range))
       range_check(i.getRetAttr(llvm::Attribute::Range));
+    #endif
 
     return val;
   }
@@ -610,9 +633,15 @@ public:
     if (!ty || !ptr)
       return error(i);
 
+    #ifdef LLVM_14
+    auto gep =
+        make_unique<GEP>(*ty, value_name(i), *ptr, i.isInBounds(), false, false);
+    #else
     auto gep =
         make_unique<GEP>(*ty, value_name(i), *ptr, i.isInBounds(),
                          i.hasNoUnsignedSignedWrap(), i.hasNoUnsignedWrap());
+    #endif
+
     auto gep_struct_ofs = [&i, this](llvm::StructType *sty, llvm::Value *ofs) {
       llvm::Value *vals[] = { llvm::ConstantInt::getFalse(i.getContext()), ofs };
       return this->DL().getIndexedOffsetInType(sty, { vals, 2 });
@@ -658,7 +687,12 @@ public:
         continue;
       }
 
+      #ifdef LLVM_14
+      gep->addIdx(DL().getTypeAllocSize(I.getIndexedType()).getKnownMinValue(),
+            *op);
+      #else
       gep->addIdx(I.getSequentialElementStride(DL()).getKnownMinValue(), *op);
+      #endif
     }
     return gep;
   }
@@ -730,9 +764,11 @@ public:
     if (!ty || !val)
       return error(i);
 
+    #ifndef LLVM_14
     auto *Fn = i.getFunction();
     if (Fn->hasRetAttribute(llvm::Attribute::Range))
       val = handleRangeAttr(Fn->getRetAttribute(llvm::Attribute::Range), *val);
+    #endif
 
     return make_unique<Return>(*ty, *val);
   }
@@ -1099,7 +1135,9 @@ public:
     case llvm::Intrinsic::experimental_constrained_fptosi:
     case llvm::Intrinsic::experimental_constrained_fptoui:
     case llvm::Intrinsic::experimental_constrained_fpext:
+    #ifndef LLVM_14
     case llvm::Intrinsic::fptrunc_round:
+    #endif
     case llvm::Intrinsic::experimental_constrained_fptrunc:
     case llvm::Intrinsic::lrint:
     case llvm::Intrinsic::experimental_constrained_lrint:
@@ -1118,7 +1156,9 @@ public:
       case llvm::Intrinsic::experimental_constrained_fptosi:  op = FpConversionOp::FPToSInt; break;
       case llvm::Intrinsic::experimental_constrained_fptoui:  op = FpConversionOp::FPToUInt; break;
       case llvm::Intrinsic::experimental_constrained_fpext:   op = FpConversionOp::FPExt; break;
+      #ifndef LLVM_14
       case llvm::Intrinsic::fptrunc_round:
+      #endif
       case llvm::Intrinsic::experimental_constrained_fptrunc: op = FpConversionOp::FPTrunc; break;
       case llvm::Intrinsic::lrint:
       case llvm::Intrinsic::experimental_constrained_lrint:
@@ -1143,10 +1183,12 @@ public:
       PARSE_BINOP();
       auto *fcmp = cast<llvm::ConstrainedFPCmpIntrinsic>(&i);
       auto cond = parse_fcmp_cond(fcmp->getPredicate());
+      auto is_signaling = i.getIntrinsicID() == llvm::Intrinsic::experimental_constrained_fcmps;
       return
         make_unique<FCmp>(*ty, value_name(i), cond, *a, *b, FastMathFlags(),
-                          parse_exceptions(i), fcmp->isSignaling());
+                          parse_exceptions(i), is_signaling);
     }
+    #ifndef LLVM_14
     case llvm::Intrinsic::is_fpclass:
     {
       PARSE_BINOP();
@@ -1157,6 +1199,7 @@ public:
       }
       return make_unique<TestOp>(*ty, value_name(i), *a, *b, op);
     }
+    #endif
     case llvm::Intrinsic::lifetime_start:
     case llvm::Intrinsic::lifetime_end:
     {
@@ -1329,9 +1372,17 @@ public:
 
       // non-relevant for correctness
       case LLVMContext::MD_loop:
+      #ifndef LLVM_14
       case LLVMContext::MD_nosanitize:
+      #endif
       case LLVMContext::MD_prof:
       case LLVMContext::MD_unpredictable:
+      #ifndef LLVM_14 // TODO: Remove?
+      case LLVMContext::MD_noalias:
+      case LLVMContext::MD_tbaa:
+      case LLVMContext::MD_tbaa_struct:
+      case LLVMContext::MD_alias_scope:
+      #endif
         break;
 
       default:
@@ -1350,6 +1401,7 @@ public:
     return true;
   }
 
+  #ifndef LLVM_14      
   unique_ptr<Instr>
   handleRangeAttrNoInsert(const llvm::Attribute &attr, Value &val) {
     auto CR = attr.getValueAsConstantRange();
@@ -1366,6 +1418,7 @@ public:
     BB->addInstr(std::move(assume));
     return ret;
   }
+  #endif
 
   // If is_callsite is true, encode attributes at call sites' params
   // Otherwise, encode attributes at function definition's arguments
@@ -1442,26 +1495,34 @@ public:
         attrs.set(ParamAttrs::NoUndef);
         break;
 
+      #ifndef LLVM_14
       case llvm::Attribute::Range:
         newval = handleRangeAttr(llvmattr, val);
         break;
+      #endif
 
+      #ifndef LLVM_14
       case llvm::Attribute::NoFPClass:
         attrs.set(ParamAttrs::NoFPClass);
         attrs.nofpclass = (uint16_t)llvmattr.getNoFPClass();
         break;
+      #endif
 
       case llvm::Attribute::Returned:
         attrs.set(ParamAttrs::Returned);
         break;
 
+      #ifndef LLVM_14
       case llvm::Attribute::AllocatedPointer:
         attrs.set(ParamAttrs::AllocPtr);
         break;
+      #endif
 
+      #ifndef LLVM_14
       case llvm::Attribute::AllocAlign:
         attrs.set(ParamAttrs::AllocAlign);
         break;
+      #endif
 
       default:
         // If it is call site, it should be added at approximation list
@@ -1502,10 +1563,12 @@ public:
         attrs.align = max(attrs.align, llvmattr.getAlignment()->value());
         break;
 
+      #ifndef LLVM_14
       case llvm::Attribute::NoFPClass:
         attrs.set(FnAttrs::NoFPClass);
         attrs.nofpclass = (uint16_t)llvmattr.getNoFPClass();
         break;
+      #endif
 
       default: break;
       }
@@ -1563,6 +1626,7 @@ public:
           attrs.allocsize_1 = *args.second;
         break;
       }
+      #ifndef LLVM_14
       case llvm::Attribute::AllocKind: {
         auto kind = llvmattr.getAllocKind();
         if ((kind & llvm::AllocFnKind::Alloc) != llvm::AllocFnKind::Unknown)
@@ -1580,6 +1644,7 @@ public:
           attrs.add(AllocKind::Aligned);
         break;
       }
+      #endif
       case llvm::Attribute::NoReturn:
         attrs.set(FnAttrs::NoReturn);
         break;
@@ -1598,6 +1663,7 @@ public:
     }
   }
 
+  #ifndef LLVM_14
   MemoryAccess handleMemAttrs(const llvm::MemoryEffects &e) {
     MemoryAccess attrs;
     attrs.setNoAccess();
@@ -1614,13 +1680,14 @@ public:
 
     for (auto &[ef, ty] : tys) {
       auto modref = e.getModRef(ef);
-      if (isModSet(modref))
+      if (llvm::isModSet(modref))
         attrs.setCanAlsoWrite(ty);
-      if (isRefSet(modref))
+      if (llvm::isRefSet(modref))
         attrs.setCanAlsoRead(ty);
     }
     return attrs;
   }
+  #endif
 
   void parse_fn_attrs(const llvm::CallInst &i, FnAttrs &attrs,
                       bool decl_only = false) {
@@ -1638,10 +1705,12 @@ public:
     handleRetAttrs(attrs_fndef.getAttributes(ret), attrs);
     handleFnAttrs(attrs_fndef.getAttributes(fnidx), attrs);
     attrs.mem.setFullAccess();
+    #ifndef LLVM_14
     if (!decl_only)
       attrs.mem &= handleMemAttrs(i.getMemoryEffects());
     if (fn)
       attrs.mem &= handleMemAttrs(fn->getMemoryEffects());
+    #endif
     attrs.inferImpliedAttributes();
   }
 
@@ -1717,7 +1786,11 @@ public:
     const auto &fnidx = llvm::AttributeList::FunctionIndex;
     handleRetAttrs(attrlist.getAttributes(ridx), attrs);
     handleFnAttrs(attrlist.getAttributes(fnidx), attrs);
+    #ifdef LLVM_14
+    attrs.mem.setFullAccess();
+    #else
     attrs.mem = handleMemAttrs(f.getMemoryEffects());
+    #endif
     attrs.inferImpliedAttributes();
 
     // create all BBs upfront in topological order
