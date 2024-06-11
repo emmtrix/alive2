@@ -1119,6 +1119,11 @@ void Memory::store(const Pointer &ptr,
       = Pointer(*this, bid, local).blockSize().isUInt(blk_size) &&
         blk_size == bytes;
 
+    for (auto &[idx, val] : data) {
+      expr off = offset + expr::mkUInt(idx >> Pointer::zeroBitsShortOffset(), off_bits);
+      blk.store_offsets.insert(off);
+    }
+
     // optimization: if fully rewriting the block, don't bother with the old
     // contents. Pick a value as the default one.
     // If we are initializing const globals, the size may be larger than the
@@ -2353,25 +2358,20 @@ expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
 
 expr Memory::blockRefined(const Pointer &src, const Pointer &tgt, unsigned bid,
                           set<expr> &undef) const {
-  unsigned bytes_per_byte = bits_byte / 8;
-
+  
   expr blk_size = src.blockSize();
   expr ptr_offset = src.getShortOffset();
-  expr val_refines;
+  
+  set<expr> store_offsets = src.getMemory().non_local_block_val[bid].store_offsets;
+  set<expr> tgt_store_offsets = tgt.getMemory().non_local_block_val[bid].store_offsets;
+  store_offsets.insert(tgt_store_offsets.begin(), tgt_store_offsets.end());
 
-  uint64_t bytes;
-  if (blk_size.isUInt(bytes) && (bytes / bytes_per_byte) <= 8) {
-    val_refines = true;
-    for (unsigned off = 0; off < (bytes / bytes_per_byte); ++off) {
-      expr off_expr = expr::mkUInt(off, Pointer::bitsShortOffset());
-      val_refines
-        &= (ptr_offset == off_expr).implies(
-             blockValRefined(tgt.getMemory(), bid, false, off_expr, undef));
-    }
-  } else {
+  expr val_refines = true;
+  for (const expr &offset : store_offsets) {
+    std::cout << offset << std::endl;
     val_refines
-      = src.getOffsetSizet().ult(src.blockSizeOffsetT()).implies(
-          blockValRefined(tgt.getMemory(), bid, false, ptr_offset, undef));
+      &= (ptr_offset == offset).implies(
+            blockValRefined(tgt.getMemory(), bid, false, offset, undef));
   }
 
   expr aligned(true);
@@ -2528,6 +2528,8 @@ Memory Memory::mkIf(const expr &cond, Memory &&then, Memory &&els) {
       = expr::mkIf(cond, then.non_local_block_val[bid].val, other.val);
     ret.non_local_block_val[bid].undef.insert(other.undef.begin(),
                                               other.undef.end());
+    ret.non_local_block_val[bid].store_offsets.insert(
+      other.store_offsets.begin(), other.store_offsets.end());
   }
   for (unsigned bid = 0, end = ret.numLocals(); bid < end; ++bid) {
     auto &other = els.local_block_val[bid];
@@ -2535,6 +2537,8 @@ Memory Memory::mkIf(const expr &cond, Memory &&then, Memory &&els) {
       = expr::mkIf(cond, then.local_block_val[bid].val, other.val);
     ret.local_block_val[bid].undef.insert(other.undef.begin(),
                                           other.undef.end());
+    ret.local_block_val[bid].store_offsets.insert(
+      other.store_offsets.begin(), other.store_offsets.end());
   }
   ret.non_local_block_liveness = expr::mkIf(cond, then.non_local_block_liveness,
                                             els.non_local_block_liveness);
