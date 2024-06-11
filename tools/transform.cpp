@@ -366,14 +366,15 @@ static void instantiate_undef(const Input *in, map<expr, expr> &instances,
   instances = std::move(instances2);
 }
 
-static expr preprocess_memory(const expr& e,
+static expr preprocess_memory(const expr &e,
+                              const expr &axioms,
                               map<std::pair<expr, expr>, bool> &distinct,
                               map<expr, expr> &preprocessed) {
   if (preprocessed.find(e) != preprocessed.end()) {
     return preprocessed.at(e);
   }
 
-  #define recur(c) preprocess_memory(c, distinct, preprocessed)
+  #define recur(child) preprocess_memory(child, axioms, distinct, preprocessed)
 
   expr result = e;
 
@@ -386,7 +387,7 @@ static expr preprocess_memory(const expr& e,
       key = {b, a};
     }
     if (distinct.find(key) == distinct.end()) {
-      auto solver_result = check_expr(a == b, "_distinct");
+      auto solver_result = check_expr(axioms && a == b, "_distinct");
       if (solver_result.isSat() || solver_result.isUnsat()) {
         distinct.insert({ key, solver_result.isUnsat() });
         return solver_result.isUnsat();
@@ -402,6 +403,7 @@ static expr preprocess_memory(const expr& e,
     expr store_array, store_idx, store_val;
     while (array.isStore(store_array, store_idx, store_val)) {
       if (is_distinct(store_idx, idx)) {
+        std::cout << "Thread store" << std::endl;
         array = store_array;
       } else {
         break;
@@ -419,6 +421,7 @@ static expr preprocess_memory(const expr& e,
       array = thread_store(array, idx);
       expr cond, then, els;
       if (array.isIf(cond, then, els)) {
+        std::cout << "Promote if" << std::endl;
         result = expr::mkIf(cond, recur(then.load(idx)), recur(els.load(idx)));
       } else {
         result = array.load(idx);
@@ -445,18 +448,16 @@ static expr preprocess_memory(const expr& e,
   return result;
 }
 
-static expr preprocess_memory(const expr& e) {
+static expr preprocess_memory(const expr& e, const expr& axioms) {
   map<expr, expr> preprocessed;
   map<std::pair<expr, expr>, bool> distinct;
-  return preprocess_memory(e, distinct, preprocessed);
+  return preprocess_memory(e, axioms, distinct, preprocessed);
 }
 
 static expr preprocess(const Transform &t, const set<expr> &qvars0,
                        const set<expr> &undef_qvars, expr &&e) {
   if (hit_half_memory_limit())
     return expr::mkForAll(qvars0, std::move(e));
-
-  e = preprocess_memory(e);
 
   // eliminate all quantified boolean vars; Z3 gets too slow with those
   auto qvars = qvars0;
@@ -666,7 +667,7 @@ check_refinement(Errors &errs, const Transform &t, State &src_state,
       return std::move(refines);
 
     return axioms_expr &&
-            preprocess(t, qvars, uvars, pre && pre_src_forall.implies(refines));
+            preprocess(t, qvars, uvars, pre && pre_src_forall.implies(preprocess_memory(refines, axioms_expr)));
   };
 
   auto check = [&](expr &&e, auto &&printer, const char *msg) {
