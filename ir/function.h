@@ -43,6 +43,7 @@ public:
   void addInstr(std::unique_ptr<Instr> &&i, bool push_front = false);
   void addInstrAt(std::unique_ptr<Instr> &&i, const Instr *other, bool before);
   void delInstr(const Instr *i);
+  void popInstr();
 
   void addExitBlock(BasicBlock* bb);
   const std::unordered_set<BasicBlock*>& getExitBlocks() const {
@@ -127,6 +128,8 @@ public:
 
   const BasicBlock& getFirstBB() const { return *BB_order[0]; }
   BasicBlock& getFirstBB() { return *BB_order[0]; }
+  const BasicBlock& getLastBB() const { return *BB_order[BB_order.size() - 1]; }
+  BasicBlock& getLastBB() { return *BB_order[BB_order.size() - 1]; }
   const BasicBlock& getSinkBB() const { return sink_bb; }
   BasicBlock& getBB(unsigned idx) { return *BB_order.at(idx); }
   BasicBlock& getBB(std::string_view name, bool push_front = false);
@@ -134,6 +137,9 @@ public:
   const BasicBlock& bbOf(const Instr &i) const;
 
   BasicBlock& insertBBAfter(std::string_view name, const BasicBlock &bb);
+  BasicBlock& addBB(std::string_view name);
+
+  size_t getNumBBs() const { return BB_order.size(); }
 
   void removeBB(BasicBlock &BB);
 

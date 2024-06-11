@@ -3999,6 +3999,17 @@ unique_ptr<Instr> LoadStrided::dup(Function &f, const string &suffix) const {
   return make_unique<LoadStrided>(getType(), getName() + suffix, *ptr, *stride);
 }
 
+MemInstr::AccessInterval LoadStrided::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  auto *aggregate = getType().getAsAggregateType();
+  auto numElements = expr::mkUInt(aggregate->numElementsConst() - 1, Pointer::bitsShortOffset());
+  auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
+  interval.size = s[*stride].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
+  interval.load = true;
+  return interval;
+}
+
 
 DEFINE_AS_RETZEROALIGN(Store, getMaxAllocSize);
 DEFINE_AS_RETZERO(Store, getMaxGEPOffset);
@@ -4101,6 +4112,17 @@ unique_ptr<Instr> StoreStrided::dup(Function &f, const string &suffix) const {
   return make_unique<StoreStrided>(*ptr, *val, *stride, *enable);
 }
 
+MemInstr::AccessInterval StoreStrided::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  auto *aggregate = val->getType().getAsAggregateType();
+  auto numElements = expr::mkUInt(aggregate->numElementsConst() - 1, Pointer::bitsShortOffset());
+  auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
+  interval.size = s[*stride].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
+  interval.store = true;
+  return interval;
+}
+
 
 DEFINE_AS_RETZEROALIGN(Incr, getMaxAllocSize);
 DEFINE_AS_RETZERO(Incr, getMaxGEPOffset);
@@ -4170,6 +4192,15 @@ expr Incr::getTypeConstraints(const Function &f) const {
 
 unique_ptr<Instr> Incr::dup(Function &f, const string &suffix) const {
   return make_unique<Incr>(getType(), getName() + suffix, *ptr, *by, align, flags);
+}
+
+MemInstr::AccessInterval Incr::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  interval.size = expr::mkUInt(Memory::getStoreByteSize(getType()), Pointer::bitsShortOffset());
+  interval.load = true;
+  interval.store = true;
+  return interval;
 }
 
 DEFINE_AS_RETZEROALIGN(Memset, getMaxAllocSize);

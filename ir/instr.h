@@ -691,6 +691,31 @@ public:
   };
 
   virtual ByteAccessInfo getByteAccessInfo() const = 0;
+
+  struct AccessInterval {
+    bool load = false;
+    bool store = false;
+    smt::expr ptr;
+    smt::expr size;
+
+    AccessInterval() {}
+
+    bool any() const { return load || store; }
+    bool onlyLoad() const { return load && !store; }
+  
+    smt::expr intersects(const AccessInterval &other, const Memory &memory) const {
+      Pointer a(memory, ptr);
+      Pointer b(memory, other.ptr);
+      
+      return a.getBid() == b.getBid() &&
+             a.getShortOffset() < b.getShortOffset() + other.size &&
+             b.getShortOffset() < a.getShortOffset() + size;
+    }
+  };
+
+  virtual AccessInterval getAccessInterval(State &s) const {
+    return AccessInterval();
+  }
 };
 
 
@@ -881,6 +906,8 @@ public:
   smt::expr getTypeConstraints(const Function &f) const override;
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
+  
+  AccessInterval getAccessInterval(State &s) const override;
 };
 
 
@@ -937,6 +964,8 @@ public:
   smt::expr getTypeConstraints(const Function &f) const override;
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
+  
+  AccessInterval getAccessInterval(State &s) const override;
 };
 
 class Incr final : public MemInstr {
@@ -966,6 +995,8 @@ public:
   smt::expr getTypeConstraints(const Function &f) const override;
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
+
+  AccessInterval getAccessInterval(State &s) const override;
 };
 
 

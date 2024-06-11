@@ -61,6 +61,10 @@ void BasicBlock::delInstr(const Instr *i) {
   }
 }
 
+void BasicBlock::popInstr() {
+  m_instrs.pop_back();
+}
+
 void BasicBlock::addExitBlock(BasicBlock* bb) {
     exit_blocks.emplace(bb);
 }
@@ -206,6 +210,14 @@ BasicBlock& Function::insertBBAfter(string_view name, const BasicBlock &bb) {
     auto I = find(BB_order.begin(), BB_order.end(), &bb);
     assert(I != BB_order.end());
     BB_order.insert(next(I), &p.first->second);
+  }
+  return p.first->second;
+}
+
+BasicBlock& Function::addBB(string_view name) {
+  auto p = BBs.try_emplace(string(name), name);
+  if (p.second) {
+    BB_order.push_back(&p.first->second);
   }
   return p.first->second;
 }
