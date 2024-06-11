@@ -20,9 +20,11 @@
 #include "llvm/Support/Signals.h"
 #ifdef LLVM_14
 #include "llvm/Support/TargetParser.h"
+#include "llvm/Passes/PassBuilder.h"
 #else
 #include "llvm/TargetParser/Triple.h"
 #endif
+
 #include <fstream>
 #include <iostream>
 #include <utility>
