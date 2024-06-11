@@ -106,6 +106,9 @@ expr Instr::getTypeConstraints() const {
   return {};
 }
 
+bool Instr::isTerminator() const {
+  return false;
+}
 
 BinOp::BinOp(Type &type, string &&name, Value &lhs, Value &rhs, Op op,
              unsigned flags)
@@ -2983,6 +2986,10 @@ JumpInstr::target_iterator JumpInstr::it_helper::end() const {
   return { instr, idx };
 }
 
+bool JumpInstr::isTerminator() const {
+  return true;
+}
+
 
 void Branch::replaceTargetWith(const BasicBlock *from, const BasicBlock *to) {
   if (dst_true == from)
@@ -3187,6 +3194,10 @@ expr Return::getTypeConstraints(const Function &f) const {
 
 unique_ptr<Instr> Return::dup(Function &f, const string &suffix) const {
   return make_unique<Return>(getType(), *val);
+}
+
+bool Return::isTerminator() const {
+  return true;
 }
 
 
@@ -4123,8 +4134,7 @@ void Incr::print(ostream &os) const {
   if (flags & NUW)
     os << "nuw ";
   
-  os << ", " << *ptr
-     << ", " << *by << ", align " << align;
+  os << *ptr << ", " << *by << ", align " << align;
 }
 
 StateValue Incr::toSMT(State &s) const {

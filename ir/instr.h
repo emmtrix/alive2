@@ -21,6 +21,7 @@ public:
   virtual std::vector<Value*> operands() const = 0;
   virtual bool propagatesPoison() const = 0;
   virtual bool hasSideEffects() const = 0;
+  virtual bool isTerminator() const;
   smt::expr getTypeConstraints() const override;
   virtual smt::expr getTypeConstraints(const Function &f) const = 0;
   virtual std::unique_ptr<Instr> dup(Function &f,
@@ -518,6 +519,7 @@ public:
   it_helper targets() const { return this; }
   virtual void replaceTargetWith(const BasicBlock *From,
                                  const BasicBlock *To) = 0;
+  bool isTerminator() const override;
 };
 
 
@@ -584,6 +586,7 @@ public:
   smt::expr getTypeConstraints(const Function &f) const override;
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
+  bool isTerminator() const override;
 };
 
 
