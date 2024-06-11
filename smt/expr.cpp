@@ -2194,6 +2194,23 @@ expr expr::subst(const vector<expr> &repls) const {
   return Z3_substitute_vars(ctx(), ast(), repls.size(), vars.get());
 }
 
+expr expr::substArgs(const vector<expr> &args) const {
+  auto z3_ast = ast();
+  assert(Z3_is_app(ctx(), z3_ast));
+
+  vector<Z3_ast> z3_args;
+  z3_args.reserve(args.size());
+
+  for (auto &arg : args) {
+    C2(arg);
+    z3_args.emplace_back(arg());
+  }
+
+  auto app = Z3_to_app(ctx(), z3_ast);
+  auto decl = Z3_get_app_decl(ctx(), app);
+  return Z3_mk_app(ctx(), decl, args.size(), z3_args.data());
+}
+
 set<expr> expr::vars() const {
   return vars({ this });
 }

@@ -486,7 +486,7 @@ Result Solver::check() const {
     if (!fml.isTrue()) {
       auto str = Z3_benchmark_to_smtlib_string(ctx(), banner, nullptr, nullptr,
                                                nullptr, 0, nullptr, fml());
-      ofstream file(get_random_filename(config::smt_benchmark_dir, "smt2"));
+      ofstream file(get_random_filename(config::smt_benchmark_dir, "smt2", postfix));
       if (!file.is_open()) {
         dbg() << "Alive2: Couldn't open smtlib benchmark file!" << endl;
         exit(1);
@@ -527,9 +527,10 @@ Result Solver::check() const {
   }
 }
 
-Result check_expr(const expr &e) {
+Result check_expr(const expr &e, const char *postfix) {
   Solver s;
   s.add(e);
+  s.set_postfix(postfix);
   return s.check();
 }
 

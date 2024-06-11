@@ -366,10 +366,97 @@ static void instantiate_undef(const Input *in, map<expr, expr> &instances,
   instances = std::move(instances2);
 }
 
+static expr preprocess_memory(const expr& e,
+                              map<std::pair<expr, expr>, bool> &distinct,
+                              map<expr, expr> &preprocessed) {
+  if (preprocessed.find(e) != preprocessed.end()) {
+    return preprocessed.at(e);
+  }
+
+  #define recur(c) preprocess_memory(c, distinct, preprocessed)
+
+  expr result = e;
+
+  auto is_distinct = [&](const expr &a, const expr &b, bool default_value = false) {
+    if (a.id() == b.id()) {
+      return false;
+    }
+    pair<expr, expr> key = {a, b};
+    if (b.id() < a.id()) {
+      key = {b, a};
+    }
+    if (distinct.find(key) == distinct.end()) {
+      auto solver_result = check_expr(a == b, "_distinct");
+      if (solver_result.isSat() || solver_result.isUnsat()) {
+        distinct.insert({ key, solver_result.isUnsat() });
+        return solver_result.isUnsat();
+      } else {
+        return default_value;
+      }
+    } else {
+      return distinct.at(key);
+    }
+  };
+
+  auto thread_store = [&](expr array, expr idx){
+    expr store_array, store_idx, store_val;
+    while (array.isStore(store_array, store_idx, store_val)) {
+      if (is_distinct(store_idx, idx)) {
+        array = store_array;
+      } else {
+        break;
+      }
+    }
+    return array;
+  };
+
+  if (e.isApp()) {
+    expr array, idx, val;
+    if (e.isLoad(array, idx)) {
+      array = recur(array);
+      idx = recur(idx);
+
+      array = thread_store(array, idx);
+      expr cond, then, els;
+      if (array.isIf(cond, then, els)) {
+        result = expr::mkIf(cond, recur(then.load(idx)), recur(els.load(idx)));
+      } else {
+        result = array.load(idx);
+      }
+    } else if (e.isStore(array, idx, val)) {
+      array = recur(array);
+      idx = recur(idx);
+      val = recur(val);
+
+      result = array.store(idx, val);
+    } else {
+      vector<expr> args;
+      for (unsigned arg = 0; arg < e.getFnNumArgs(); arg++) {
+        args.emplace_back(recur(e.getFnArg(arg)));
+      }
+      result = e.substArgs(args);
+    }
+  }
+
+
+  #undef recur
+
+  preprocessed.insert({ e, result });
+  return result;
+}
+
+static expr preprocess_memory(const expr& e) {
+  map<expr, expr> preprocessed;
+  map<std::pair<expr, expr>, bool> distinct;
+  return preprocess_memory(e, distinct, preprocessed);
+}
+
 static expr preprocess(const Transform &t, const set<expr> &qvars0,
                        const set<expr> &undef_qvars, expr &&e) {
   if (hit_half_memory_limit())
     return expr::mkForAll(qvars0, std::move(e));
+
+  e = preprocess_memory(e);
 
   // eliminate all quantified boolean vars; Z3 gets too slow with those
   auto qvars = qvars0;

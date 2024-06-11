@@ -150,10 +150,13 @@ class Solver {
   Z3_solver s;
   bool valid = true;
   bool is_unsat = false;
+  const char *postfix = nullptr;
 
 public:
   Solver(bool simple = false);
   ~Solver();
+
+  void set_postfix(const char *p) { postfix = p; }
 
   void add(const expr &e);
   // use a negated solver for minimization
@@ -167,7 +170,7 @@ public:
   friend class SolverPush;
 };
 
-Result check_expr(const expr &e);
+Result check_expr(const expr &e, const char *postfix = nullptr);
 
 
 class SolverPush {

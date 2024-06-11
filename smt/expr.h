@@ -32,7 +32,6 @@ class expr {
 
   Z3_sort sort() const;
   Z3_decl decl() const;
-  Z3_app isApp() const;
   Z3_app isAppOf(int app_type) const;
 
   expr binop_commutative(const expr &rhs,
@@ -128,6 +127,7 @@ public:
   bool isInt(int64_t &n) const;
   bool isSameTypeOf(const expr &other) const;
 
+  Z3_app isApp() const;
   bool isEq(expr &lhs, expr &rhs) const;
   bool isSLE(expr &lhs, expr &rhs) const;
   bool isULE(expr &lhs, expr &rhs) const;
@@ -359,6 +359,8 @@ public:
 
   // replace quantified variables in increasing index order
   expr subst(const std::vector<expr> &repls) const;
+
+  expr substArgs(const std::vector<expr> &args) const;
 
   std::set<expr> vars() const;
   static std::set<expr> vars(const std::vector<const expr*> &exprs);
