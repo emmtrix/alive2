@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include <iostream>
+
 namespace IR {
 
 class Function;
@@ -706,10 +708,16 @@ public:
     smt::expr intersects(const AccessInterval &other, const Memory &memory) const {
       Pointer a(memory, ptr);
       Pointer b(memory, other.ptr);
-      
+
       return a.getBid() == b.getBid() &&
-             a.getShortOffset() < b.getShortOffset() + other.size &&
-             b.getShortOffset() < a.getShortOffset() + size;
+             a.getShortOffset().slt(b.getShortOffset() + other.size) &&
+             b.getShortOffset().slt(a.getShortOffset() + size);
+    }
+
+    void print(std::ostream &s) const {
+      if (load) s << "load ";
+      if (store) s << "store ";
+      s << "ptr=" << ptr << " size=" << size;
     }
   };
 
