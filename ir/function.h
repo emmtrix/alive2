@@ -37,6 +37,9 @@ public:
 
   const std::string& getName() const { return name; }
 
+  size_t size() const { return m_instrs.size(); }
+  Instr& at(size_t index) { return *m_instrs[index]; }
+
   smt::expr getTypeConstraints(const Function &f) const;
   void fixupTypes(const smt::Model &m);
 

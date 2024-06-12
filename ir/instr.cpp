@@ -1929,7 +1929,8 @@ StateValue Select::toSMT(State &s) const {
 
 expr Select::getTypeConstraints(const Function &f) const {
   return Value::getTypeConstraints() &&
-         cond->getType().enforceIntOrVectorType(1) &&
+         (cond->getType().enforceIntOrVectorType(1) ||
+          cond->getType().enforceIntOrVectorType(8)) &&
          getType().enforceVectorTypeIff(cond->getType()) &&
          (fmath.isNone() ? expr(true) : getType().enforceFloatOrVectorType()) &&
          getType() == a->getType() &&
@@ -3951,6 +3952,13 @@ unique_ptr<Instr> Load::dup(Function &f, const string &suffix) const {
   return make_unique<Load>(getType(), getName() + suffix, *ptr, align);
 }
 
+MemInstr::AccessInterval Load::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  interval.size = expr::mkUInt(Memory::getStoreByteSize(getType()), Pointer::bitsShortOffset());
+  interval.load = true;
+  return interval;
+}
 
 DEFINE_AS_RETZEROALIGN(LoadStrided, getMaxAllocSize);
 DEFINE_AS_RETZERO(LoadStrided, getMaxGEPOffset);
@@ -4063,6 +4071,9 @@ unique_ptr<Instr> Store::dup(Function &f, const string &suffix) const {
   return make_unique<Store>(*ptr, *val, align);
 }
 
+vector<expr> Store::getStoreConditions(State &s) const {
+  return {true};
+}
 
 DEFINE_AS_RETZEROALIGN(StoreStrided, getMaxAllocSize);
 DEFINE_AS_RETZERO(StoreStrided, getMaxGEPOffset);
@@ -4101,6 +4112,8 @@ StateValue StoreStrided::toSMT(State &s) const {
   check_can_store(s, p);
   auto &v = s[*val];
   s.getMemory().store(p, v, val->getType(), 1, s.getUndefVars());
+  auto &en = s[*enable];
+  (void)en;
   return {};
 }
 
@@ -4123,6 +4136,24 @@ MemInstr::AccessInterval StoreStrided::getAccessInterval(State &s) const {
   return interval;
 }
 
+vector<expr> StoreStrided::getStoreConditions(State &s) const {
+  
+  cout << "a" << endl;
+  auto en = s[*enable];
+  cout << "b" << endl;
+  vector<expr> conds;
+  auto agg = enable->getType().getAsAggregateType();
+  assert(agg);
+  cout << "c" << endl;
+  for (unsigned i = 0, e = agg->numElementsConst(); i != e; ++i) {
+    if (!agg->isPadding(i)) {
+      conds.emplace_back(agg->extract(en, i).value != 0);
+      cout << "d" << endl;
+    }
+  }
+  cout << "e" << endl;
+  return conds;
+}
 
 DEFINE_AS_RETZEROALIGN(Incr, getMaxAllocSize);
 DEFINE_AS_RETZERO(Incr, getMaxGEPOffset);
@@ -4201,6 +4232,10 @@ MemInstr::AccessInterval Incr::getAccessInterval(State &s) const {
   interval.load = true;
   interval.store = true;
   return interval;
+}
+
+vector<expr> Incr::getStoreConditions(State &s) const {
+  return {true};
 }
 
 DEFINE_AS_RETZEROALIGN(Memset, getMaxAllocSize);

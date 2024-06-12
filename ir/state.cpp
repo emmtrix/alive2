@@ -630,6 +630,14 @@ bool State::isAsmMode() const {
   return getFn().has(FnAttrs::Asm);
 }
 
+expr State::getPath(BasicBlock &bb) const {
+  OrExpr path;
+  for (auto &[src, data] : predecessor_data.at(&bb)) {
+    path.add(data.path);
+  }
+  return path();
+}
+
 void State::cleanup(const Value &val) {
   values.erase(&val);
   seen_bbs.clear();

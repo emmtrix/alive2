@@ -724,6 +724,10 @@ public:
   virtual AccessInterval getAccessInterval(State &s) const {
     return AccessInterval();
   }
+
+  virtual std::vector<smt::expr> getStoreConditions(State &s) const {
+    return {};
+  }
 };
 
 
@@ -889,6 +893,8 @@ public:
   smt::expr getTypeConstraints(const Function &f) const override;
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
+
+  AccessInterval getAccessInterval(State &s) const override;
 };
 
 class LoadStrided final : public MemInstr {
@@ -945,6 +951,8 @@ public:
   smt::expr getTypeConstraints(const Function &f) const override;
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
+  
+  std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
 class StoreStrided final : public MemInstr {
@@ -957,6 +965,7 @@ public:
   Value& getPtr() const { return *ptr; }
   Value& getStride() const { return *stride; }
   Value& getEnable() const { return *enable; }
+  void setEnable(Value &en) { enable = &en; }
 
   std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
   uint64_t getMaxAccessSize() const override;
@@ -974,6 +983,7 @@ public:
     dup(Function &f, const std::string &suffix) const override;
   
   AccessInterval getAccessInterval(State &s) const override;
+  std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
 class Incr final : public MemInstr {
@@ -1005,6 +1015,7 @@ public:
     dup(Function &f, const std::string &suffix) const override;
 
   AccessInterval getAccessInterval(State &s) const override;
+  std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
 
