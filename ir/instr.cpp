@@ -3201,6 +3201,76 @@ bool Return::isTerminator() const {
   return true;
 }
 
+vector<Value*> LoopContinue::operands() const {
+  return { };
+}
+
+bool LoopContinue::propagatesPoison() const {
+  return false;
+}
+
+bool LoopContinue::hasSideEffects() const {
+  return true;
+}
+
+void LoopContinue::rauw(const Value &what, Value &with) {
+}
+
+void LoopContinue::print(ostream &os) const {
+  os << "loop.continue";
+}
+
+StateValue LoopContinue::toSMT(State &s) const {
+  return {};
+}
+
+expr LoopContinue::getTypeConstraints(const Function &f) const {
+  return true;
+}
+
+unique_ptr<Instr> LoopContinue::dup(Function &f, const string &suffix) const {
+  return make_unique<LoopContinue>();
+}
+
+bool LoopContinue::isTerminator() const {
+  return true;
+}
+
+vector<Value*> LoopBreak::operands() const {
+  return { };
+}
+
+bool LoopBreak::propagatesPoison() const {
+  return false;
+}
+
+bool LoopBreak::hasSideEffects() const {
+  return true;
+}
+
+void LoopBreak::rauw(const Value &what, Value &with) {
+}
+
+void LoopBreak::print(ostream &os) const {
+  os << "loop.break";
+}
+
+StateValue LoopBreak::toSMT(State &s) const {
+  return {};
+}
+
+expr LoopBreak::getTypeConstraints(const Function &f) const {
+  return true;
+}
+
+unique_ptr<Instr> LoopBreak::dup(Function &f, const string &suffix) const {
+  return make_unique<LoopBreak>();
+}
+
+bool LoopBreak::isTerminator() const {
+  return true;
+}
+
 
 Assume::Assume(Value &cond, Kind kind)
     : Instr(Type::voidTy, "assume"), args({&cond}), kind(kind) {

@@ -1187,6 +1187,16 @@ BasicBlock* LoopAnalysis::getParent(BasicBlock *bb) const {
   return I != parent.end() ? I->second : nullptr;
 }
 
+bool LoopAnalysis::isDescendent(BasicBlock *bb, BasicBlock *ancestor) const {
+  while (bb != nullptr) {
+    if (bb == ancestor) {
+      return true;
+    }
+    bb = getParent(ancestor);
+  }
+  return false;
+}
+
 void LoopAnalysis::printDot(ostream &os) const {
   os << "digraph {\n";
 

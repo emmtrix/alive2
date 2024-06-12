@@ -325,6 +325,8 @@ public:
          FastMathFlags fmath = {})
     : Instr(type, std::move(name)), cond(&cond), a(&a), b(&b), fmath(fmath) {}
 
+  Value& getCond() const { return *cond; }
+  void setCond(Value &c) { cond = &c; }
   Value *getTrueValue() const { return a; }
   Value *getFalseValue() const { return b; }
 
@@ -578,6 +580,39 @@ class Return final : public Instr {
   Value *val;
 public:
   Return(Type &type, Value &val) : Instr(type, "return"), val(&val) {}
+
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  bool hasSideEffects() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+  bool isTerminator() const override;
+};
+
+
+class LoopContinue final : public Instr {
+public:
+  LoopContinue() : Instr(Type::voidTy, "loop.continue") {}
+
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  bool hasSideEffects() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+  bool isTerminator() const override;
+};
+
+class LoopBreak final : public Instr {
+public:
+  LoopBreak() : Instr(Type::voidTy, "loop.break") {}
 
   std::vector<Value*> operands() const override;
   bool propagatesPoison() const override;
