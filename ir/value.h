@@ -86,11 +86,17 @@ class GlobalVariable final : public Value {
   unsigned align;
   bool isconst;
   bool arbitrary_size;
+
+  bool is_accumulator = false;
 public:
   GlobalVariable(Type &type, std::string &&name, uint64_t allocsize,
                  unsigned align, bool isconst, bool arbitrary_size) :
     Value(type, std::move(name)), allocsize(allocsize), align(align),
     isconst(isconst), arbitrary_size(arbitrary_size) {}
+    
+  bool isAccumulator() const { return is_accumulator; }
+  void setAccumulator(bool is_acc) { is_accumulator = is_acc; }
+  
   uint64_t size() const { return allocsize; }
   bool isArbitrarySize() const { return arbitrary_size; }
   unsigned getAlignment() const { return align; }

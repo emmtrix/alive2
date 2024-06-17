@@ -90,6 +90,8 @@ void GlobalVariable::print(ostream &os) const {
   else
     os << allocsize;
   os << " bytes, align " << align;
+  if (is_accumulator)
+    os << ", accumulator";
 }
 
 static expr get_global(State &s, const string &name, const expr *size,

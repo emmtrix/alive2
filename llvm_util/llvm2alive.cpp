@@ -404,6 +404,20 @@ public:
         return make_unique<Incr>(*ty, value_name(i), *args.at(0), *args.at(1), 4, Incr::NSW);
       } else if (fn_decl->getName() == "__emx_assume_step") {
         return make_unique<AssumeStep>(*args.at(0), *args.at(1), 4);
+      } else if (fn_decl->getName() == "__emx_reduce") {
+        Value *accumulator = args.at(0);
+        while (ConversionOp *conv = dynamic_cast<ConversionOp*>(accumulator)) {
+          if (conv->getOp() != ConversionOp::BitCast) {
+            break;
+          }
+          accumulator = &conv->getValue();
+        }
+        
+        GlobalVariable *global = dynamic_cast<GlobalVariable*>(accumulator);
+        assert(global);
+        global->setAccumulator(true);
+        
+        return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
       } else if (fn_decl->getName() == "__emx_loop_continue") {
         return make_unique<LoopContinue>();
       } else if (fn_decl->getName() == "__emx_loop_break") {
