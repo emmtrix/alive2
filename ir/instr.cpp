@@ -4141,6 +4141,14 @@ unique_ptr<Instr> Store::dup(Function &f, const string &suffix) const {
   return make_unique<Store>(*ptr, *val, align);
 }
 
+MemInstr::AccessInterval Store::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  interval.size = expr::mkUInt(Memory::getStoreByteSize(val->getType()), Pointer::bitsShortOffset());
+  interval.store = true;
+  return interval;
+}
+
 vector<expr> Store::getStoreConditions(State &s) const {
   return {true};
 }

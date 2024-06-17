@@ -986,7 +986,8 @@ public:
   smt::expr getTypeConstraints(const Function &f) const override;
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
-  
+
+  AccessInterval getAccessInterval(State &s) const override;
   std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
