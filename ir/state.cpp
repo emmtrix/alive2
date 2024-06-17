@@ -631,12 +631,27 @@ bool State::isAsmMode() const {
 }
 
 expr State::getPath(BasicBlock &bb) const {
+  if (&f.getFirstBB() == &bb)
+    return true;
+  
   OrExpr path;
   for (auto &[src, data] : predecessor_data.at(&bb)) {
     path.add(data.path);
   }
   return path();
 }
+
+expr State::getUB(BasicBlock &bb) const {
+  if (&f.getFirstBB() == &bb)
+    return true;
+  
+  DisjointExpr<expr> UB;
+  for (auto &[src, data] : predecessor_data.at(&bb)) {
+    UB.add_disj(data.UB, data.path());
+  }
+  return *UB();
+}
+
 
 void State::cleanup(const Value &val) {
   values.erase(&val);

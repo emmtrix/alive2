@@ -1054,6 +1054,37 @@ public:
 };
 
 
+class AssumeStep final : public MemInstr {
+private:
+  Value *ptr, *step;
+  uint64_t align;
+  uint64_t factor;
+public:
+  AssumeStep(Value &ptr, Value &step, uint64_t align, uint64_t factor = 1)
+    : MemInstr(Type::voidTy, "assume_step"), ptr(&ptr), step(&step), align(align), factor(factor) {}
+
+  uint64_t getFactor() const { return factor; }
+  void setFactor(uint64_t f) { factor = f; }
+
+  std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
+  uint64_t getMaxAccessSize() const override;
+  uint64_t getMaxAccessStride() const;
+  uint64_t getMaxGEPOffset() const override;
+  ByteAccessInfo getByteAccessInfo() const override;
+
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+  
+  AccessInterval getAccessInterval(State &s) const override;
+};
+
+
 class Memset final : public MemInstr {
   Value *ptr, *val, *bytes;
   uint64_t align;

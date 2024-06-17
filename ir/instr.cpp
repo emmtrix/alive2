@@ -4207,21 +4207,15 @@ MemInstr::AccessInterval StoreStrided::getAccessInterval(State &s) const {
 }
 
 vector<expr> StoreStrided::getStoreConditions(State &s) const {
-  
-  cout << "a" << endl;
   auto en = s[*enable];
-  cout << "b" << endl;
   vector<expr> conds;
   auto agg = enable->getType().getAsAggregateType();
   assert(agg);
-  cout << "c" << endl;
   for (unsigned i = 0, e = agg->numElementsConst(); i != e; ++i) {
     if (!agg->isPadding(i)) {
       conds.emplace_back(agg->extract(en, i).value != 0);
-      cout << "d" << endl;
     }
   }
-  cout << "e" << endl;
   return conds;
 }
 
@@ -4307,6 +4301,71 @@ MemInstr::AccessInterval Incr::getAccessInterval(State &s) const {
 vector<expr> Incr::getStoreConditions(State &s) const {
   return {true};
 }
+
+DEFINE_AS_RETZEROALIGN(AssumeStep, getMaxAllocSize);
+DEFINE_AS_RETZERO(AssumeStep, getMaxGEPOffset);
+
+uint64_t AssumeStep::getMaxAccessSize() const {
+  return round_up(Memory::getStoreByteSize(step->getType()), align);
+}
+
+MemInstr::ByteAccessInfo AssumeStep::getByteAccessInfo() const {
+  return ByteAccessInfo::get(step->getType(), false, align);
+}
+
+vector<Value*> AssumeStep::operands() const {
+  return { ptr, step };
+}
+
+bool AssumeStep::propagatesPoison() const {
+  return true;
+}
+
+void AssumeStep::rauw(const Value &what, Value &with) {
+  RAUW(ptr);
+  RAUW(step);
+}
+
+void AssumeStep::print(ostream &os) const {
+  os << "assume_step " << *ptr << ", " << *step << ", align " << align;
+}
+
+StateValue AssumeStep::toSMT(State &s) const {
+  auto &p = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, p);
+
+  // Load
+  auto [a, ub] = s.getMemory().load(p, step->getType(), align);
+  s.addUB(std::move(ub));
+
+  // SRem == 0
+  auto &b = s[*step];
+  expr non_poison = a.non_poison && b.non_poison; // TODO: Handle
+  
+  // Assume
+  s.addGuardableUB(a.value.srem(b.value * expr::mkUInt(factor, b.value)) == 0);
+
+  return {};
+}
+
+expr AssumeStep::getTypeConstraints(const Function &f) const {
+  return Value::getTypeConstraints() &&
+         ptr->getType().enforcePtrType() &&
+         step->getType().enforceIntType();
+}
+
+unique_ptr<Instr> AssumeStep::dup(Function &f, const string &suffix) const {
+  return make_unique<AssumeStep>(*ptr, *step, align, factor);
+}
+
+MemInstr::AccessInterval AssumeStep::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  interval.size = expr::mkUInt(Memory::getStoreByteSize(step->getType()), Pointer::bitsShortOffset());
+  interval.load = true;
+  return interval;
+}
+
 
 DEFINE_AS_RETZEROALIGN(Memset, getMaxAllocSize);
 DEFINE_AS_RETZERO(Memset, getMaxGEPOffset);
