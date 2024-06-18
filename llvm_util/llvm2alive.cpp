@@ -437,10 +437,14 @@ public:
         };
 
         auto remove_bitcast = [](Value *value) -> Value* {
-          if (ConversionOp *conv = dynamic_cast<ConversionOp*>(value)) {
-            if (!value->getType().isVectorType() &&
-                conv->getValue().getType().isVectorType()) {
-              return &conv->getValue();
+          Value *current = value;
+          while (ConversionOp *conv = dynamic_cast<ConversionOp*>(current)) {
+            if (conv->getOp() != ConversionOp::BitCast) {
+              break;
+            }
+            current = &conv->getValue();
+            if (current->getType().isVectorType()) {
+              value = current;
             }
           }
           return value;
@@ -451,7 +455,7 @@ public:
           return make_unique<LoadStrided>(*ty, value_name(i), *args.at(0), *args.at(1));
         } else if (base_name == "__emx_simd_store_strided") {
           return make_unique<StoreStrided>(
-            *remove_bitcast(args.at(0)), *remove_bitcast(args.at(1)),
+            *args.at(0), *remove_bitcast(args.at(1)),
             *args.at(2), *remove_bitcast(args.at(3)));
         } else if (base_name == "__emx_simd_cond") {
           return make_unique<Select>(
