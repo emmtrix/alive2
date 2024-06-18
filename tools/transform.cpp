@@ -1528,7 +1528,7 @@ static map<string_view, Instr*> can_remove_init(Function &fn) {
   return to_remove;
 }
 
-static void remove_unreachable_bbs(Function &f) {
+void remove_unreachable_bbs(Function &f) {
   vector<BasicBlock*> wl = { &f.getFirstBB() };
   set<BasicBlock*> reachable;
 
@@ -1563,7 +1563,7 @@ static void remove_unreachable_bbs(Function &f) {
   }
 }
 
-static void optimize_ptrcmp(Function &f) {
+void optimize_ptrcmp(Function &f) {
   auto is_inbounds = [](const Value &v) {
     if (auto *gep = dynamic_cast<const GEP*>(&v)) {
       if (!gep->isInBounds())
