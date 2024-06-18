@@ -3162,6 +3162,23 @@ check_ret_attributes(State &s, StateValue &&sv, const StateValue &returned_arg,
   return newsv;
 }
 
+void add_return(State &s, StateValue retval, const Type &ty) {
+  s.addGuardableUB(s.getMemory().checkNocapture());
+
+  vector<pair<Value*, ParamAttrs>> args;
+  for (auto &arg : s.getFn().getInputs()) {
+    args.emplace_back(const_cast<Value*>(&arg), ParamAttrs());
+  }
+
+  auto &attrs = s.getFn().getFnAttrs();
+  if (attrs.has(FnAttrs::NoReturn))
+    s.addGuardableUB(expr(false));
+
+  s.addReturn(check_ret_attributes(s, std::move(retval),
+                                   s.getReturnedInput().value_or(StateValue()),
+                                   ty, attrs, args));
+}
+
 StateValue Return::toSMT(State &s) const {
   StateValue retval;
 
@@ -3171,19 +3188,7 @@ StateValue Return::toSMT(State &s) const {
   else
     retval = s[*val];
 
-  s.addGuardableUB(s.getMemory().checkNocapture());
-
-  vector<pair<Value*, ParamAttrs>> args;
-  for (auto &arg : s.getFn().getInputs()) {
-    args.emplace_back(const_cast<Value*>(&arg), ParamAttrs());
-  }
-
-  if (attrs.has(FnAttrs::NoReturn))
-    s.addGuardableUB(expr(false));
-
-  s.addReturn(check_ret_attributes(s, std::move(retval),
-                                   s.getReturnedInput().value_or(StateValue()),
-                                   getType(), attrs, args));
+  add_return(s, retval, getType());
   return {};
 }
 
@@ -3221,6 +3226,7 @@ void LoopContinue::print(ostream &os) const {
 }
 
 StateValue LoopContinue::toSMT(State &s) const {
+  add_return(s, s[Value::voidVal], Type::voidTy);
   return {};
 }
 
@@ -3256,6 +3262,7 @@ void LoopBreak::print(ostream &os) const {
 }
 
 StateValue LoopBreak::toSMT(State &s) const {
+  add_return(s, s[Value::voidVal], Type::voidTy);
   return {};
 }
 

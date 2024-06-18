@@ -28,6 +28,12 @@ public:
   virtual smt::expr getTypeConstraints(const Function &f) const = 0;
   virtual std::unique_ptr<Instr> dup(Function &f,
                                      const std::string &suffix) const = 0;
+
+  void rauw_all(const std::map<const Value*, Value*> &subst) {
+    for (const auto &[a, b] : subst) {
+      rauw(*a, *b);
+    }
+  }
 };
 
 

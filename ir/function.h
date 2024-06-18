@@ -39,6 +39,11 @@ public:
 
   size_t size() const { return m_instrs.size(); }
   Instr& at(size_t index) { return *m_instrs[index]; }
+  std::unique_ptr<Instr>&& moveAt(size_t index) { return std::move(m_instrs[index]); }
+
+  void setInstrs(std::vector<std::unique_ptr<Instr>> &&instrs) {
+    m_instrs = std::move(instrs);
+  }
 
   smt::expr getTypeConstraints(const Function &f) const;
   void fixupTypes(const smt::Model &m);
@@ -116,7 +121,7 @@ public:
       bits_ptr_offset(bits_ptr_offset), little_endian(little_endian),
       is_var_args(is_var_args) {}
 
-  const IR::Type& getType() const { return type ? *type : Type::voidTy; }
+  IR::Type& getType() const { return type ? *type : Type::voidTy; }
   void setType(IR::Type &t) { type = &t; }
 
   const std::string& getName() const { return name; }
