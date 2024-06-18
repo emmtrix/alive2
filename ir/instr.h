@@ -43,7 +43,8 @@ public:
             SAdd_Sat, UAdd_Sat, SSub_Sat, USub_Sat, SShl_Sat, UShl_Sat,
             SAdd_Overflow, UAdd_Overflow, SSub_Overflow, USub_Overflow,
             SMul_Overflow, UMul_Overflow,
-            And, Or, Xor, Cttz, Ctlz, UMin, UMax, SMin, SMax, Abs };
+            And, Or, Xor, Cttz, Ctlz, UMin, UMax, SMin, SMax, Abs,
+            UCmp, SCmp };
   enum Flags { None = 0, NSW = 1 << 0, NUW = 1 << 1, Exact = 1 << 2, Disjoint = 1 << 3 };
 
 private:
@@ -90,6 +91,8 @@ public:
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* getOpName() const;
+  bool isCommutative() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -151,6 +154,7 @@ public:
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* getOpName() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -233,6 +237,7 @@ public:
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* getOpName() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -257,6 +262,7 @@ public:
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* getOpName() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -315,6 +321,7 @@ public:
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* getOpName() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -447,6 +454,7 @@ public:
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
+  const char* getCondName() const;
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
   smt::expr getTypeConstraints(const Function &f) const override;
@@ -677,10 +685,12 @@ private:
   Value *val;
   std::vector<Value*> args;
   Kind kind;
+  bool is_welldefined;
 
 public:
   AssumeVal(Type &type, std::string &&name, Value &val,
-            std::vector<Value *> &&args, Kind kind);
+            std::vector<Value *> &&args, Kind kind,
+            bool is_welldefined = false);
 
   std::vector<Value*> operands() const override;
   bool propagatesPoison() const override;
@@ -724,6 +734,8 @@ public:
     // If zero, this instruction does not read/write bytes.
     // Otherwise, bytes of a memory can be widened to this size.
     unsigned byteSize = 0;
+
+    unsigned subByteAccess = 0;
 
     bool doesMemAccess() const { return byteSize; }
 

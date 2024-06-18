@@ -23,21 +23,22 @@ namespace smt { class Model; }
 namespace IR {
 
 class Memory;
+class SMTMemoryAccess;
 class State;
 
 
 // A data structure that represents a byte.
 // A byte is either a pointer byte or a non-pointer byte.
 // Pointer byte's representation:
-//   +-+-----------+-----------------------------+---------------+---------+
-//   |1|non-poison?|  Pointer (see class below)  | byte offset   | padding |
-//   | |(1 bit)    |                             | (0 or 3 bits) |         |
-//   +-+-----------+-----------------------------+---------------+---------+
+//   +-+-------------+-----------+---------------+----------------------+
+//   |1| non-poison? |  Pointer  | byte offset   |        padding       |
+//   | | (1 bit)     |           | (0 or 3 bits) |                      |
+//   +-+-------------+-----------+---------------+----------------------+
 // Non-pointer byte's representation:
-//   +-+--------------------+--------------------+-------------------------+
-//   |0| non-poison bit(s)  | data               |         padding         |
-//   | | (bits_byte)        | (bits_byte)        |                         |
-//   +-+--------------------+--------------------+-------------------------+
+//   +-+-------------------+-------------+--------------------+---------+
+//   |0| non-poison bit(s) | data        | stored bits        | padding |
+//   | | (bits_byte)       | (bits_byte) | (num_subbyte_bits) |         |
+//   +-+-------------------+-------------+--------------------+---------+
 
 class Byte {
   const Memory &m;
@@ -51,7 +52,7 @@ public:
   // non_poison should be an one-bit vector or boolean.
   Byte(const Memory &m, const StateValue &ptr, unsigned i);
 
-  Byte(const Memory &m, const StateValue &v);
+  Byte(const Memory &m, const StateValue &v, unsigned bits_read, bool);
 
   static Byte mkPoisonByte(const Memory &m);
 
@@ -63,9 +64,12 @@ public:
   smt::expr nonptrNonpoison() const;
   smt::expr boolNonptrNonpoison() const;
   smt::expr nonptrValue() const;
+  smt::expr numStoredBits() const;
   smt::expr isPoison() const;
   smt::expr nonPoison() const;
   smt::expr isZero() const; // zero or null
+
+  bool isAsmMode() const;
 
   smt::expr castPtrToInt() const;
   smt::expr forceCastToInt() const;
@@ -285,8 +289,8 @@ public:
   mkFnRet(const char *name, const std::vector<PtrInput> &ptr_inputs,
           bool is_local, const FnRetData *data = nullptr);
   CallState mkCallState(const std::string &fnname, bool nofree,
-                        MemoryAccess access);
-  void setState(const CallState &st, MemoryAccess access,
+                        const SMTMemoryAccess &access);
+  void setState(const CallState &st, const SMTMemoryAccess &access,
                 const std::vector<PtrInput> &ptr_inputs,
                 unsigned inaccessible_bid);
 
