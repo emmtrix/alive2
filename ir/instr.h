@@ -751,7 +751,7 @@ public:
     bool load = false;
     bool store = false;
     smt::expr ptr;
-    smt::expr size;
+    std::optional<smt::expr> size;
 
     AccessInterval() {}
 
@@ -762,20 +762,27 @@ public:
       Pointer a(memory, ptr);
       Pointer b(memory, other.ptr);
 
-      return a.getBid() == b.getBid() &&
-             a.getShortOffset().slt(b.getShortOffset() + other.size) &&
-             b.getShortOffset().slt(a.getShortOffset() + size);
+      smt::expr expr = a.getBid() == b.getBid(); 
+      if (size.has_value() && other.size.has_value()) {
+        expr = expr &&
+               a.getShortOffset().slt(b.getShortOffset() + other.size.value()) &&
+               b.getShortOffset().slt(a.getShortOffset() + size.value());
+      }
+
+      return expr;
     }
 
-    void print(std::ostream &s) const {
-      if (load) s << "load ";
-      if (store) s << "store ";
-      s << "ptr=" << ptr << " size=" << size;
+    void print(std::ostream &stream) const {
+      if (load) stream << "load ";
+      if (store) stream << "store ";
+      stream << "ptr=" << ptr;
+      if (size.has_value())
+        stream << " size=" << size.value();
     }
   };
 
-  virtual AccessInterval getAccessInterval(State &s) const {
-    return AccessInterval();
+  virtual std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const {
+    return {};
   }
 
   virtual std::vector<smt::expr> getStoreConditions(State &s) const {
@@ -947,7 +954,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
 
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
 };
 
 class LoadStrided final : public MemInstr {
@@ -974,7 +981,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
   
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
 };
 
 class LoadIndexed final : public MemInstr {
@@ -1001,7 +1008,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
   
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
 };
 
 
@@ -1032,7 +1039,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
 
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
   std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
@@ -1063,7 +1070,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
   
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
   std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
@@ -1094,7 +1101,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
   
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
   std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
@@ -1126,7 +1133,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
 
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
   std::vector<smt::expr> getStoreConditions(State &s) const override;
 };
 
@@ -1158,7 +1165,7 @@ public:
   std::unique_ptr<Instr>
     dup(Function &f, const std::string &suffix) const override;
   
-  AccessInterval getAccessInterval(State &s) const override;
+  std::vector<AccessInterval> getAccessIntervals(State &s, bool precise) const override;
 };
 
 

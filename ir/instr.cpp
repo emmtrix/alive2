@@ -4259,12 +4259,12 @@ unique_ptr<Instr> Load::dup(Function &f, const string &suffix) const {
   return make_unique<Load>(getType(), getName() + suffix, *ptr, align);
 }
 
-MemInstr::AccessInterval Load::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> Load::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   interval.size = expr::mkUInt(Memory::getStoreByteSize(getType()), Pointer::bitsShortOffset());
   interval.load = true;
-  return interval;
+  return {interval};
 }
 
 DEFINE_AS_RETZEROALIGN(LoadStrided, getMaxAllocSize);
@@ -4316,7 +4316,7 @@ unique_ptr<Instr> LoadStrided::dup(Function &f, const string &suffix) const {
   return make_unique<LoadStrided>(getType(), getName() + suffix, *ptr, *stride);
 }
 
-MemInstr::AccessInterval LoadStrided::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> LoadStrided::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   auto *aggregate = getType().getAsAggregateType();
@@ -4324,7 +4324,7 @@ MemInstr::AccessInterval LoadStrided::getAccessInterval(State &s) const {
   auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
   interval.size = s[*stride].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
   interval.load = true;
-  return interval;
+  return {interval};
 }
 
 DEFINE_AS_RETZEROALIGN(LoadIndexed, getMaxAllocSize);
@@ -4357,12 +4357,28 @@ void LoadIndexed::print(ostream &os) const {
 }
 
 StateValue LoadIndexed::toSMT(State &s) const {
-  // TODO
-  auto &p = s.getWellDefinedPtr(*ptr);
-  check_can_load(s, p);
-  auto [sv, ub] = s.getMemory().load(p, getType(), 1);
-  s.addUB(std::move(ub));
-  return sv;
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, base_pointer);
+  
+  auto &element_type = getType().getAsAggregateType()->getChild(0);
+
+  auto indices_vec = s[*indices];
+  auto indices_agg = indices->getType().getAsAggregateType();
+  vector<StateValue> values;
+  
+  for (unsigned i = 0, e = indices_agg->numElementsConst(); i != e; ++i) {
+    auto [index, index_poison] = indices_agg->extract(indices_vec, i);
+    s.addUB(std::move(index_poison));
+
+    Pointer pointer(s.getMemory(), base_pointer);
+    pointer += index;
+
+    auto [value, ub] = s.getMemory().load(pointer(), element_type, 1);
+    s.addUB(std::move(ub));
+    values.emplace_back(value);
+  }
+
+  return getType().getAsAggregateType()->aggregateVals(values);
 }
 
 expr LoadIndexed::getTypeConstraints(const Function &f) const {
@@ -4376,18 +4392,12 @@ unique_ptr<Instr> LoadIndexed::dup(Function &f, const string &suffix) const {
   return make_unique<LoadIndexed>(getType(), getName() + suffix, *ptr, *indices);
 }
 
-MemInstr::AccessInterval LoadIndexed::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> LoadIndexed::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
-  auto *aggregate = getType().getAsAggregateType();
-  auto numElements = expr::mkUInt(aggregate->numElementsConst() - 1, Pointer::bitsShortOffset());
-  auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
-  //interval.size = s[*stride].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
-  interval.size = size; // TODO
   interval.load = true;
-  return interval;
+  return {interval};
 }
-
 
 
 DEFINE_AS_RETZEROALIGN(Store, getMaxAllocSize);
@@ -4442,12 +4452,12 @@ unique_ptr<Instr> Store::dup(Function &f, const string &suffix) const {
   return make_unique<Store>(*ptr, *val, align);
 }
 
-MemInstr::AccessInterval Store::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> Store::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   interval.size = expr::mkUInt(Memory::getStoreByteSize(val->getType()), Pointer::bitsShortOffset());
   interval.store = true;
-  return interval;
+  return {interval};
 }
 
 vector<expr> Store::getStoreConditions(State &s) const {
@@ -4506,7 +4516,7 @@ unique_ptr<Instr> StoreStrided::dup(Function &f, const string &suffix) const {
   return make_unique<StoreStrided>(*ptr, *val, *stride, *enable);
 }
 
-MemInstr::AccessInterval StoreStrided::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> StoreStrided::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   auto *aggregate = val->getType().getAsAggregateType();
@@ -4514,7 +4524,7 @@ MemInstr::AccessInterval StoreStrided::getAccessInterval(State &s) const {
   auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
   interval.size = s[*stride].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
   interval.store = true;
-  return interval;
+  return {interval};
 }
 
 vector<expr> StoreStrided::getStoreConditions(State &s) const {
@@ -4582,16 +4592,11 @@ unique_ptr<Instr> StoreIndexed::dup(Function &f, const string &suffix) const {
   return make_unique<StoreIndexed>(*ptr, *val, *indices, *enable);
 }
 
-MemInstr::AccessInterval StoreIndexed::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> StoreIndexed::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
-  auto *aggregate = val->getType().getAsAggregateType();
-  auto numElements = expr::mkUInt(aggregate->numElementsConst() - 1, Pointer::bitsShortOffset());
-  auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
-  //interval.size = s[*indices].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
-  interval.size = size; // TODO
   interval.store = true;
-  return interval;
+  return {interval};
 }
 
 vector<expr> StoreIndexed::getStoreConditions(State &s) const {
@@ -4678,13 +4683,13 @@ unique_ptr<Instr> Incr::dup(Function &f, const string &suffix) const {
   return make_unique<Incr>(getType(), getName() + suffix, *ptr, *by, align, flags);
 }
 
-MemInstr::AccessInterval Incr::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> Incr::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   interval.size = expr::mkUInt(Memory::getStoreByteSize(getType()), Pointer::bitsShortOffset());
   interval.load = true;
   interval.store = true;
-  return interval;
+  return {interval};
 }
 
 vector<expr> Incr::getStoreConditions(State &s) const {
@@ -4747,12 +4752,12 @@ unique_ptr<Instr> AssumeStep::dup(Function &f, const string &suffix) const {
   return make_unique<AssumeStep>(*ptr, *step, align, factor);
 }
 
-MemInstr::AccessInterval AssumeStep::getAccessInterval(State &s) const {
+vector<MemInstr::AccessInterval> AssumeStep::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   interval.size = expr::mkUInt(Memory::getStoreByteSize(step->getType()), Pointer::bitsShortOffset());
   interval.load = true;
-  return interval;
+  return {interval};
 }
 
 
