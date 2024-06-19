@@ -4307,7 +4307,9 @@ StateValue LoadStrided::toSMT(State &s) const {
 
 expr LoadStrided::getTypeConstraints(const Function &f) const {
   return Value::getTypeConstraints() &&
-         ptr->getType().enforcePtrType();
+         getType().enforceVectorType() &&
+         ptr->getType().enforcePtrType() &&
+         stride->getType().enforceIntType();
 }
 
 unique_ptr<Instr> LoadStrided::dup(Function &f, const string &suffix) const {
@@ -4324,6 +4326,68 @@ MemInstr::AccessInterval LoadStrided::getAccessInterval(State &s) const {
   interval.load = true;
   return interval;
 }
+
+DEFINE_AS_RETZEROALIGN(LoadIndexed, getMaxAllocSize);
+DEFINE_AS_RETZERO(LoadIndexed, getMaxGEPOffset);
+
+uint64_t LoadIndexed::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo LoadIndexed::getByteAccessInfo() const {
+  return ByteAccessInfo::get(getType(), false, 1);
+}
+
+vector<Value*> LoadIndexed::operands() const {
+  return { ptr, indices };
+}
+
+bool LoadIndexed::propagatesPoison() const {
+  return true;
+}
+
+void LoadIndexed::rauw(const Value &what, Value &with) {
+  RAUW(ptr);
+  RAUW(indices);
+}
+
+void LoadIndexed::print(ostream &os) const {
+  os << getName() << " = load.indexed " << getType() << ", " << *ptr
+     << ", indices " << *indices;
+}
+
+StateValue LoadIndexed::toSMT(State &s) const {
+  // TODO
+  auto &p = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, p);
+  auto [sv, ub] = s.getMemory().load(p, getType(), 1);
+  s.addUB(std::move(ub));
+  return sv;
+}
+
+expr LoadIndexed::getTypeConstraints(const Function &f) const {
+  return Value::getTypeConstraints() &&
+         getType().enforceVectorType() &&
+         ptr->getType().enforcePtrType() &&
+         indices->getType().enforceVectorType();
+}
+
+unique_ptr<Instr> LoadIndexed::dup(Function &f, const string &suffix) const {
+  return make_unique<LoadIndexed>(getType(), getName() + suffix, *ptr, *indices);
+}
+
+MemInstr::AccessInterval LoadIndexed::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  auto *aggregate = getType().getAsAggregateType();
+  auto numElements = expr::mkUInt(aggregate->numElementsConst() - 1, Pointer::bitsShortOffset());
+  auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
+  //interval.size = s[*stride].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
+  interval.size = size; // TODO
+  interval.load = true;
+  return interval;
+}
+
 
 
 DEFINE_AS_RETZEROALIGN(Store, getMaxAllocSize);
@@ -4433,7 +4497,9 @@ StateValue StoreStrided::toSMT(State &s) const {
 }
 
 expr StoreStrided::getTypeConstraints(const Function &f) const {
-  return ptr->getType().enforcePtrType();
+  return ptr->getType().enforcePtrType() &&
+         stride->getType().enforceIntType() &&
+         enable->getType().enforceVectorType();
 }
 
 unique_ptr<Instr> StoreStrided::dup(Function &f, const string &suffix) const {
@@ -4463,6 +4529,84 @@ vector<expr> StoreStrided::getStoreConditions(State &s) const {
   }
   return conds;
 }
+
+DEFINE_AS_RETZEROALIGN(StoreIndexed, getMaxAllocSize);
+DEFINE_AS_RETZERO(StoreIndexed, getMaxGEPOffset);
+
+uint64_t StoreIndexed::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo StoreIndexed::getByteAccessInfo() const {
+  return ByteAccessInfo::get(val->getType(), true, 1);
+}
+
+vector<Value*> StoreIndexed::operands() const {
+  return { val, ptr, indices, enable };
+}
+
+bool StoreIndexed::propagatesPoison() const {
+  return false;
+}
+
+void StoreIndexed::rauw(const Value &what, Value &with) {
+  RAUW(val);
+  RAUW(ptr);
+  RAUW(indices);
+  RAUW(enable);
+}
+
+void StoreIndexed::print(ostream &os) const {
+  os << "store.indexed " << *val << ", " << *ptr << ", indices " << *indices << ", enable " << *enable;
+}
+
+StateValue StoreIndexed::toSMT(State &s) const {
+  // TODO
+
+  auto &p = s.getWellDefinedPtr(*ptr);
+  check_can_store(s, p);
+  auto &v = s[*val];
+  s.getMemory().store(p, v, val->getType(), 1, s.getUndefVars());
+  auto &en = s[*enable];
+  (void)en;
+  return {};
+}
+
+expr StoreIndexed::getTypeConstraints(const Function &f) const {
+  return ptr->getType().enforcePtrType() &&
+         indices->getType().enforceVectorType() &&
+         enable->getType().enforceVectorType();
+}
+
+unique_ptr<Instr> StoreIndexed::dup(Function &f, const string &suffix) const {
+  return make_unique<StoreIndexed>(*ptr, *val, *indices, *enable);
+}
+
+MemInstr::AccessInterval StoreIndexed::getAccessInterval(State &s) const {
+  AccessInterval interval;
+  interval.ptr = expr(s[*ptr].value);
+  auto *aggregate = val->getType().getAsAggregateType();
+  auto numElements = expr::mkUInt(aggregate->numElementsConst() - 1, Pointer::bitsShortOffset());
+  auto size = expr::mkUInt(Memory::getStoreByteSize(aggregate->getChild(0)), Pointer::bitsShortOffset());
+  //interval.size = s[*indices].value.zextOrTrunc(Pointer::bitsShortOffset()) * numElements + size;
+  interval.size = size; // TODO
+  interval.store = true;
+  return interval;
+}
+
+vector<expr> StoreIndexed::getStoreConditions(State &s) const {
+  auto en = s[*enable];
+  vector<expr> conds;
+  auto agg = enable->getType().getAsAggregateType();
+  assert(agg);
+  for (unsigned i = 0, e = agg->numElementsConst(); i != e; ++i) {
+    if (!agg->isPadding(i)) {
+      conds.emplace_back(agg->extract(en, i).value != 0);
+    }
+  }
+  return conds;
+}
+
 
 DEFINE_AS_RETZEROALIGN(Incr, getMaxAllocSize);
 DEFINE_AS_RETZERO(Incr, getMaxGEPOffset);

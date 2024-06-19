@@ -39,6 +39,7 @@ std::string value_name(const llvm::Value &v);
 
 IR::Type& get_int_type(unsigned bits);
 IR::Type* llvm_type2alive(const llvm::Type *ty);
+llvm::Type* alive_type2llvm(IR::Type *type, llvm::LLVMContext &context);
 
 IR::Value* make_intconst(uint64_t val, int bits);
 IR::Value* make_intconst(const llvm::APInt &val);

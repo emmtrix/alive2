@@ -245,6 +245,30 @@ Type* llvm_type2alive(const llvm::Type *ty) {
   }
 }
 
+llvm::Type* alive_type2llvm(Type *type, llvm::LLVMContext &context) {
+  if (IntType *int_type = dynamic_cast<IntType*>(type)) {
+    return llvm::IntegerType::get(context, int_type->bits());
+  } else if (FloatType *float_type = dynamic_cast<FloatType*>(type)) {
+    switch (float_type->getFpType()) {
+    case FloatType::Half: return llvm::Type::getHalfTy(context); break;
+    case FloatType::Float: return llvm::Type::getFloatTy(context); break;
+    case FloatType::Double: return llvm::Type::getDoubleTy(context); break;
+    case FloatType::Quad: return llvm::Type::getFP128Ty(context); break;
+    case FloatType::BFloat: return llvm::Type::getBFloatTy(context); break;
+    case FloatType::Unknown: UNREACHABLE();
+    }
+    UNREACHABLE();
+  } else if (VectorType *vector_type = dynamic_cast<VectorType*>(type)) {
+    return llvm::VectorType::get(
+      alive_type2llvm(&vector_type->getChild(0), context),
+      vector_type->numElementsConst(),
+      false
+    );
+  } else {
+    return nullptr;
+  }
+}
+
 
 Value* make_intconst(uint64_t val, int bits) {
   auto c = make_unique<IntConst>(get_int_type(bits), val);

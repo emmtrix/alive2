@@ -452,11 +452,21 @@ public:
 
         string base_name = demangled_to_string(demangler.getFunctionBaseName(nullptr, 0));
         if (base_name == "__emx_simd_load_strided") {
-          return make_unique<LoadStrided>(*ty, value_name(i), *args.at(0), *args.at(1));
+          return make_unique<LoadStrided>(
+            *ty, value_name(i),
+            *args.at(0), *args.at(1));
         } else if (base_name == "__emx_simd_store_strided") {
           return make_unique<StoreStrided>(
             *args.at(0), *remove_bitcast(args.at(1)),
             *args.at(2), *remove_bitcast(args.at(3)));
+        } else if (base_name == "__emx_simd_load_indexed") {
+          return make_unique<LoadIndexed>(
+            *ty, value_name(i),
+            *args.at(0), *remove_bitcast(args.at(1)));
+        } else if (base_name == "__emx_simd_store_indexed") {
+          return make_unique<StoreIndexed>(
+            *args.at(0), *remove_bitcast(args.at(1)),
+            *remove_bitcast(args.at(2)), *remove_bitcast(args.at(3)));
         } else if (base_name == "__emx_simd_cond") {
           return make_unique<Select>(
             *ty, value_name(i),
