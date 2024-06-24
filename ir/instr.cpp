@@ -4392,10 +4392,36 @@ unique_ptr<Instr> LoadIndexed::dup(Function &f, const string &suffix) const {
   return make_unique<LoadIndexed>(getType(), getName() + suffix, *ptr, *indices);
 }
 
+vector<MemInstr::AccessInterval> precise_indexed_intervals(State &s, Type &value_type, Value *indices, MemInstr::AccessInterval &interval) {
+  auto indices_vec = s[*indices];
+  auto indices_agg = indices->getType().getAsAggregateType();
+
+  vector<MemInstr::AccessInterval> intervals;
+  for (unsigned i = 0, e = indices_agg->numElementsConst(); i != e; ++i) {
+    MemInstr::AccessInterval precise_interval = interval;
+
+    auto [index, index_poison] = indices_agg->extract(indices_vec, i);
+    Pointer pointer(s.getMemory(), interval.ptr);
+    pointer += index;
+
+    precise_interval.ptr = pointer();
+    precise_interval.size = expr::mkUInt(
+      Memory::getStoreByteSize(value_type),
+      Pointer::bitsShortOffset()
+    );
+    intervals.emplace_back(precise_interval);
+  }
+  return intervals;
+}
+
 vector<MemInstr::AccessInterval> LoadIndexed::getAccessIntervals(State &s, bool precise) const {
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   interval.load = true;
+  if (precise) {
+    auto values_agg = getType().getAsAggregateType();
+    return precise_indexed_intervals(s, values_agg->getChild(0), indices, interval);
+  }
   return {interval};
 }
 
@@ -4571,14 +4597,28 @@ void StoreIndexed::print(ostream &os) const {
 }
 
 StateValue StoreIndexed::toSMT(State &s) const {
-  // TODO
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_store(s, base_pointer);
+  
+  auto &value_vec = s[*val];
+  auto value_agg = val->getType().getAsAggregateType();
 
-  auto &p = s.getWellDefinedPtr(*ptr);
-  check_can_store(s, p);
-  auto &v = s[*val];
-  s.getMemory().store(p, v, val->getType(), 1, s.getUndefVars());
-  auto &en = s[*enable];
-  (void)en;
+  auto indices_vec = s[*indices];
+  auto indices_agg = indices->getType().getAsAggregateType();
+
+  auto enable_vec = s[*enable];
+  auto enable_agg = enable->getType().getAsAggregateType();
+
+  for (unsigned i = 0, e = indices_agg->numElementsConst(); i != e; ++i) {
+    auto [index, index_poison] = indices_agg->extract(indices_vec, i);
+    s.addUB(std::move(index_poison));
+
+    Pointer pointer(s.getMemory(), base_pointer);
+    pointer += index;
+
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars());
+  }
+
   return {};
 }
 
@@ -4596,6 +4636,10 @@ vector<MemInstr::AccessInterval> StoreIndexed::getAccessIntervals(State &s, bool
   AccessInterval interval;
   interval.ptr = expr(s[*ptr].value);
   interval.store = true;
+  if (precise) {
+    auto values_agg = val->getType().getAsAggregateType();
+    return precise_indexed_intervals(s, values_agg->getChild(0), indices, interval);
+  }
   return {interval};
 }
 
