@@ -4,6 +4,9 @@
 #include "ir/constant.h"
 #include "smt/expr.h"
 #include "util/compiler.h"
+#include "util/config.h"
+#include "ir/globals.h"
+
 #include <bit>
 #include <cassert>
 #include <cmath>
@@ -92,14 +95,24 @@ expr FloatConst::getTypeConstraints() const {
 }
 
 StateValue FloatConst::toSMT(State &s) const {
+  expr value;
   if (bit_value)
-    return { expr::mkNumber(val.c_str(), expr::mkUInt(0, getType().bits())),
-             true };
-
-  return { expr::mkNumber(val.c_str(),
+    value = expr::mkNumber(val.c_str(), expr::mkUInt(0, getType().bits()));
+  else
+    value = expr::mkNumber(val.c_str(),
                           getType().getAsFloatType()->getDummyFloat())
-             .float2BV(),
-           true };
+             .float2BV();
+  
+  if (config::is_uf_float()) {
+    unsigned size = value.bits();
+    unsigned float_size = min(size, bits_for_float);
+    ostringstream name;
+    name << getType() << ".const";
+    value = expr::mkUF(name.str(), {value}, expr::mkUInt(0, float_size));
+    value = expr::mkUInt(0, size - float_size).concat(value);
+  }
+
+  return {std::move(value), true};
 }
 
 

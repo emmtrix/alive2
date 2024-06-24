@@ -314,6 +314,7 @@ public:
   smt::expr
     mkInput(State &s, const char *name, const ParamAttrs &attrs) const override;
   unsigned numPointerElements() const;
+  unsigned numFloatElements() const;
   void printVal(std::ostream &os, const State &s,
                 const smt::expr &e) const override;
   const AggregateType* getAsAggregateType() const override;

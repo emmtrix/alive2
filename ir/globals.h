@@ -15,6 +15,10 @@ extern unsigned num_consts_src;
 
 extern unsigned num_globals_src;
 
+extern unsigned num_float_src, num_float_tgt;
+
+extern unsigned bits_for_float;
+
 extern unsigned num_ptrinputs;
 
 extern unsigned num_inaccessiblememonly_fns;

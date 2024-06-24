@@ -853,6 +853,53 @@ static StateValue fm_poison(State &s, expr a, const expr &ap,
                    ty, fmath, rm, bitwise, flags_in_only, 1);
 }
 
+static StateValue uf_float(const string name, const vector<StateValue> &args,
+                           bool returns_float, const expr &ret_dummy,
+                           bool is_commutative, unsigned fmath) {
+
+  vector<expr> arg_values;
+  arg_values.reserve(args.size());
+  for (auto &arg : args) {
+    unsigned high = min(arg.value.bits(), bits_for_float) - 1;
+    arg_values.push_back(arg.value.extract(high, 0));
+  }
+
+  auto range = ret_dummy;
+  if (returns_float) {
+    unsigned float_size = min(ret_dummy.bits(), bits_for_float);
+    range = expr::mkUInt(0, float_size);
+  }
+
+  auto value = expr::mkUF(name, arg_values, range);
+  if (is_commutative) {
+    assert(arg_values.size() == 2);
+    swap(arg_values[0], arg_values[1]);
+    value = value & expr::mkUF(name, arg_values, range);
+    swap(arg_values[0], arg_values[1]);
+  }
+
+  if (returns_float) {
+    value = expr::mkUInt(0, ret_dummy.bits() - value.bits()).concat(value);
+  }
+
+  AndExpr non_poison;
+  for (auto &arg : args) {
+    non_poison.add(arg.non_poison);
+  }
+  if ((fmath & FastMathFlags::NNaN) || (fmath & FastMathFlags::NInf)) {
+    auto poison_uf = expr::mkUF(name + ".np", arg_values, false);
+    if (is_commutative) {
+      assert(arg_values.size() == 2);
+      swap(arg_values[0], arg_values[1]);
+      poison_uf &= expr::mkUF(name + ".np", arg_values, false);
+      swap(arg_values[0], arg_values[1]);
+    }
+    non_poison.add(poison_uf);
+  }
+
+  return { std::move(value), non_poison() };
+}
+
 StateValue FpBinOp::toSMT(State &s) const {
   function<expr(const expr&, const expr&, const expr&)> fn;
   function<StateValue(const StateValue&, const StateValue&, const Type&)> scalar;
@@ -864,24 +911,7 @@ StateValue FpBinOp::toSMT(State &s) const {
 
       ostringstream os;
       os << getOpName() << "." << ty;
-      auto value = expr::mkUF(os.str(), {a.value, b.value}, a.value);
-      if (isCommutative()) {
-        value = value & expr::mkUF(os.str(), {b.value, a.value}, a.value);
-      }
-
-      AndExpr non_poison;
-      non_poison.add(a.non_poison);
-      non_poison.add(b.non_poison);
-      if ((fmath.flags & FastMathFlags::NNaN) || (fmath.flags & FastMathFlags::NInf)) {
-        os << ".np";
-        auto poison_uf = expr::mkUF(os.str(), {a.value, b.value}, false);
-        if (isCommutative()) {
-          poison_uf &= expr::mkUF(os.str(), {b.value, a.value}, false);
-        }
-        non_poison.add(poison_uf);
-      }
-
-      return { std::move(value), non_poison() };
+      return uf_float(os.str(), {a, b}, true, a.value, isCommutative(), fmath.flags);
     };
   } else {
     switch (op) {
@@ -1175,15 +1205,7 @@ StateValue FpUnaryOp::toSMT(State &s) const {
 
       ostringstream os;
       os << getOpName() << "." << ty;
-      auto value = expr::mkUF(os.str(), {v.value}, v.value);
-
-      auto non_poison = v.non_poison;
-      if ((fmath.flags & FastMathFlags::NNaN) || (fmath.flags & FastMathFlags::NInf)) {
-        os << ".np";
-        non_poison &= expr::mkUF(os.str(), {v.value}, false);
-      }
-      
-      return {std::move(value), std::move(non_poison)};
+      return uf_float(os.str(), {v}, true, v.value, false, fmath.flags);
     };
   } else {
     switch (op) {
@@ -1493,18 +1515,7 @@ StateValue FpTernaryOp::toSMT(State &s) const {
 
       ostringstream os;
       os << getOpName() << "." << ty;
-      auto value = expr::mkUF(os.str(), {a.value, b.value, c.value}, a.value);
-
-      AndExpr non_poison;
-      non_poison.add(a.non_poison);
-      non_poison.add(b.non_poison);
-      non_poison.add(c.non_poison);
-      if ((fmath.flags & FastMathFlags::NNaN) || (fmath.flags & FastMathFlags::NInf)) {
-        os << ".np";
-        non_poison.add(expr::mkUF(os.str(), {a.value, b.value, c.value}, false));
-      }
-
-      return {std::move(value), non_poison()};
+      return uf_float(os.str(), {a, b, c}, true, a.value, false, fmath.flags);
     };
   } else {
     switch (op) {
@@ -1591,13 +1602,14 @@ StateValue TestOp::toSMT(State &s) const {
   auto &a = s[*lhs];
   auto &b = s[*rhs];
   function<expr(const expr&, const Type&)> fn;
+  function<StateValue(const StateValue&, const Type&)> scalar;
 
   if (config::is_uf_float()) {
-    fn = [&](const expr &v, const Type &ty) -> expr {
+    scalar = [&](const StateValue &v, const Type &ty) -> StateValue {
       s.doesApproximation("uf_float", true);
       ostringstream os;
       os << getOpName() << "." << ty;
-      return expr::mkUF(os.str(), {v}, expr::mkUInt(0, 1));
+      return uf_float(os.str(), {v}, false, expr::mkUInt(0, 1), false, 0);
     };
   } else {
     switch (op) {
@@ -1609,11 +1621,11 @@ StateValue TestOp::toSMT(State &s) const {
       };
       break;
     }
-  }
 
-  auto scalar = [&](const StateValue &v, const Type &ty) -> StateValue {
-    return { fn(v.value, ty), expr(v.non_poison) };
-  };
+    scalar = [&](const StateValue &v, const Type &ty) -> StateValue {
+      return { fn(v.value, ty), expr(v.non_poison) };
+    };
+  } 
 
   if (getType().isVectorType()) {
     vector<StateValue> vals;
@@ -1871,8 +1883,26 @@ StateValue FpConversionOp::toSMT(State &s) const {
 
       ostringstream os;
       os << getOpName() << "." << from_type << ".to." << to_type;
+      
+      bool argument_float = op == FPToSInt || op == FPToUInt || op == LRInt || op == LRound || op == FPExt || op == FPTrunc;
+      bool returns_float = op == SIntToFP || op == UIntToFP || op == FPExt || op == FPTrunc;
+
+      auto arg = sv.value;
+      if (argument_float) {
+        unsigned high = min(arg.bits(), bits_for_float) - 1;
+        arg = arg.extract(high, 0);
+      }
+
       expr range = to_type.getDummyValue(true).value;
-      auto value = expr::mkUF(os.str(), {sv.value}, range);
+      unsigned size = range.bits();
+      if (returns_float) {
+        unsigned float_size = min(range.bits(), bits_for_float);
+        range = expr::mkUInt(0, float_size);
+      }
+      auto value = expr::mkUF(os.str(), {arg}, range);
+      if (returns_float) {
+        value = expr::mkUInt(0, size - value.bits()).concat(value);
+      }
 
       AndExpr non_poison;
       non_poison.add(sv.non_poison);
@@ -2931,27 +2961,12 @@ StateValue FCmp::toSMT(State &s) const {
 
         ostringstream os;
         os << name << "." << ty;
-        auto value = expr::mkUF(os.str(), {lhs.value, rhs.value}, expr::mkUInt(0, 1));
-        if (commutative) {
-          value = value & expr::mkUF(os.str(), {rhs.value, lhs.value}, expr::mkUInt(0, 1));
-        }
+
+        auto res = uf_float(os.str(), {lhs, rhs}, false, expr::mkUInt(0, 1), commutative, fmath.flags);
         if (negate) {
-          value = ~value;
+          res.value = ~res.value;
         }
-
-        AndExpr non_poison;
-        non_poison.add(a.non_poison);
-        non_poison.add(b.non_poison);
-        if ((fmath.flags & FastMathFlags::NNaN) || (fmath.flags & FastMathFlags::NInf)) {
-          os << ".np";
-          auto poison_uf = expr::mkUF(os.str(), {lhs.value, rhs.value}, false);
-          if (commutative) {
-            poison_uf &= expr::mkUF(os.str(), {rhs.value, lhs.value}, false);
-          }
-          non_poison.add(poison_uf);
-        }
-
-        return {std::move(value), non_poison()};
+        return res;
       }
       }
     };

@@ -1028,6 +1028,17 @@ unsigned AggregateType::numPointerElements() const {
   return count;
 }
 
+unsigned AggregateType::numFloatElements() const {
+  unsigned count = 0;
+  for (unsigned i = 0; i < elements; ++i) {
+    if (children[i]->isFloatType())
+      count++;
+    else if (auto aty = children[i]->getAsAggregateType())
+      count += aty->numFloatElements();
+  }
+  return count;
+}
+
 void AggregateType::printVal(ostream &os, const State &s, const expr &e) const {
   UNREACHABLE();
 }

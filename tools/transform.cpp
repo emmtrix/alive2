@@ -734,6 +734,23 @@ static bool returns_local(const Value &v) {
   return dynamic_cast<const Alloc*>(&v);
 }
 
+static unsigned num_floats(const Type &ty) {
+  unsigned n = ty.isFloatType();
+  if (auto aty = ty.getAsAggregateType())
+    n += aty->numFloatElements();
+  return n;
+}
+
+static unsigned num_floats(const Value &v) {
+  if (dynamic_cast<const Select*>(&v) ||
+      dynamic_cast<const InsertElement*>(&v) ||
+      dynamic_cast<const ExtractElement*>(&v) ||
+      dynamic_cast<const ShuffleVector*>(&v)) {
+    return 0;
+  }
+  return num_floats(v.getType());
+}
+
 static Value *get_base_ptr(Value *ptr) {
   vector<Value*> todo = { ptr };
   Value *base_ptr = nullptr;
@@ -960,6 +977,8 @@ static void calculateAndInitConstants(Transform &t) {
   // The number of local blocks.
   num_locals_src = 0;
   num_locals_tgt = 0;
+  num_float_src = 0;
+  num_float_tgt = 0;
   uint64_t max_gep_src = 0, max_gep_tgt = 0;
   uint64_t max_alloc_size = 0;
   uint64_t max_access_size = 0;
@@ -1003,6 +1022,7 @@ static void calculateAndInitConstants(Transform &t) {
   for (auto fn : { &t.src, &t.tgt }) {
     bool is_src = fn == &t.src;
     unsigned &cur_num_locals = is_src ? num_locals_src : num_locals_tgt;
+    unsigned &cur_num_float = is_src ? num_float_src : num_float_tgt;
     uint64_t &cur_max_gep    = is_src ? max_gep_src : max_gep_tgt;
     uint64_t &loc_alloc_aligned_size
       = is_src ? loc_src_alloc_aligned_size : loc_tgt_alloc_aligned_size;
@@ -1015,6 +1035,8 @@ static void calculateAndInitConstants(Transform &t) {
       has_ptr_arg |= hasPtr(i->getType());
 
       update_min_vect_sz(i->getType());
+
+      cur_num_float += num_floats(*i);
 
       if (i->hasAttribute(ParamAttrs::Dereferenceable)) {
         does_mem_access = true;
@@ -1041,9 +1063,15 @@ static void calculateAndInitConstants(Transform &t) {
       }
     }
 
+    for (auto &c : fn->getConstants()) {
+      cur_num_float += num_floats(c);
+    }
+
     for (auto &i : fn->instrs()) {
       if (returns_local(i))
         ++cur_num_locals;
+      
+      cur_num_float += num_floats(i);
 
       for (auto op : i.operands()) {
         has_null_pointer |= has_nullptr(op);
@@ -1194,6 +1222,8 @@ static void calculateAndInitConstants(Transform &t) {
   bits_for_bid = max(1u, ilog2_ceil(max(num_locals, num_nonlocals), false))
                    + (num_locals && num_nonlocals);
 
+  bits_for_float = max(1u, ilog2_ceil(num_float_src + num_float_tgt, false));
+
   // reserve a multiple of 4 for the number of offset bits to make SMT &
   // counterexamples more readable
   // Allow an extra bit for the sign
@@ -1245,6 +1275,9 @@ static void calculateAndInitConstants(Transform &t) {
                   << "\nnum_locals_tgt: " << num_locals_tgt
                   << "\nnum_nonlocals_src: " << num_nonlocals_src
                   << "\nnum_nonlocals: " << num_nonlocals
+                  << "\nnum_float_src: " << num_float_src
+                  << "\nnum_float_tgt: " << num_float_tgt
+                  << "\nbits_for_float: " << bits_for_float
                   << "\nnum_inaccessiblememonly_fns: "
                     << num_inaccessiblememonly_fns
                   << "\nbits_for_bid: " << bits_for_bid
