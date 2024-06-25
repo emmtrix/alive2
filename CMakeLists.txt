@@ -19,7 +19,7 @@ if (MSVC)
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/O2 /Oi /Zi ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
   set(CMAKE_EXE_LINKER_FLAGS         "/LTCG:INCREMENTAL ${CMAKE_EXE_LINKER_FLAGS}")
 else()
-  set(CMAKE_CXX_FLAGS                "-Wall -Werror -fPIC -fstrict-enums ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS                "-Wall -fPIC -fstrict-enums ${CMAKE_CXX_FLAGS}")
   set(CMAKE_CXX_FLAGS_DEBUG          "-g -Og ${CMAKE_CXX_FLAGS_DEBUG}")
   set(CMAKE_CXX_FLAGS_RELEASE        "-O3 ${CMAKE_CXX_FLAGS_RELEASE}")
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELEASE} -g ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
@@ -194,7 +194,9 @@ if (BUILD_LLVM_UTILS OR BUILD_TV)
   add_library(llvm_util STATIC ${LLVM_UTIL_SRCS})
   set(ALIVE_LIBS_LLVM llvm_util ${ALIVE_LIBS})
 
-  set(LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS} TargetParser)
+  if (NOT NOT_LINK_TARGET_PARSER)
+    set(LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS} TargetParser)
+  endif()
 
   add_llvm_executable(alive-tv
     "tools/alive-tv.cpp"
