@@ -4534,7 +4534,7 @@ StateValue StoreStrided::toSMT(State &s) const {
 
   for (unsigned i = 0, e = value_agg->numElementsConst(); i != e; ++i) {
     Pointer pointer(s.getMemory(), base_pointer);
-    pointer += stride_val.value * i;
+    pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
 
     auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
     s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars(), enable_store);
