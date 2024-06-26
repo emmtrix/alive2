@@ -2059,7 +2059,7 @@ StateValue Select::toSMT(State &s) const {
 
   auto scalar
     = [&](const auto &a, const auto &b, const auto &c, const Type &ty) {
-    auto cond = c.value == 1;
+    auto cond = c.value != 0;
     auto identity = [](const expr &x, auto &rm) { return x; };
     return fm_poison(s, expr::mkIf(cond, a.value, b.value),
                      c.non_poison &&
