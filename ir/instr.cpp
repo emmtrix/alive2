@@ -4521,14 +4521,25 @@ void StoreStrided::print(ostream &os) const {
 }
 
 StateValue StoreStrided::toSMT(State &s) const {
-  // TODO
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_store(s, base_pointer);
+  
+  auto &value_vec = s[*val];
+  auto value_agg = val->getType().getAsAggregateType();
 
-  auto &p = s.getWellDefinedPtr(*ptr);
-  check_can_store(s, p);
-  auto &v = s[*val];
-  s.getMemory().store(p, v, val->getType(), 1, s.getUndefVars());
-  auto &en = s[*enable];
-  (void)en;
+  auto enable_vec = s[*enable];
+  auto enable_agg = enable->getType().getAsAggregateType();
+
+  auto stride_val = s[*stride];
+
+  for (unsigned i = 0, e = value_agg->numElementsConst(); i != e; ++i) {
+    Pointer pointer(s.getMemory(), base_pointer);
+    pointer += stride_val.value * i;
+
+    auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars(), enable_store);
+  }
+
   return {};
 }
 
