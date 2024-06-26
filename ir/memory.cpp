@@ -2321,6 +2321,23 @@ expr Memory::int2ptr(const expr &val0) const {
   return expr::mkIf(val0 == 0, null, fn);
 }
 
+static expr load_propagate(const expr &array,
+                           const expr &index,
+                           unsigned depth = 10) {
+  if (depth == 0) {
+    return array.load(index);
+  }
+
+  expr cond, then, els;
+  if (array.isIf(cond, then, els)) {
+    return expr::mkIf(cond,
+                      load_propagate(then, index, depth - 1),
+                      load_propagate(els, index, depth - 1));
+  } else {
+    return array.load(index);
+  }
+}
+
 expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
                              const expr &offset, set<expr> &undef) const {
   assert(!local);
@@ -2345,8 +2362,8 @@ expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
     return false;
   }
 
-  Byte val(*this, mem1.val.load(offset));
-  Byte val2(other, mem2.load(offset));
+  Byte val(*this, load_propagate(mem1.val, offset));
+  Byte val2(other, load_propagate(mem2, offset));
 
   if (val.eq(val2))
     return true;
