@@ -214,10 +214,6 @@ else()
   set(LLVM_UTIL_SRCS "")
 endif()
 
-if (EXTERNAL_PROJECT)
-  add_subdirectory(${EXTERNAL_PROJECT_PATH} ${EXTERNAL_PROJECT})
-endif()
-
 if (BUILD_TV)
   if (CYGWIN)
     message(FATAL_ERROR "LLVM plugins not supported on cygwin")
@@ -285,4 +281,8 @@ add_custom_target("check"
 
 if (BUILD_TV)
   add_dependencies("check" "alive-tv" "quick-fuzz" "tv")
+endif()
+
+if (EXTERNAL_PROJECT)
+  add_subdirectory(${EXTERNAL_PROJECT_PATH} ${EXTERNAL_PROJECT})
 endif()
