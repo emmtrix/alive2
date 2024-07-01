@@ -4371,7 +4371,7 @@ StateValue LoadIndexed::toSMT(State &s) const {
     s.addUB(std::move(index_poison));
 
     Pointer pointer(s.getMemory(), base_pointer);
-    pointer += index;
+    pointer += index.sextOrTrunc(bits_for_offset);
 
     auto [value, ub] = s.getMemory().load(pointer(), element_type, 1);
     s.addUB(std::move(ub));
@@ -4402,7 +4402,7 @@ vector<MemInstr::AccessInterval> precise_indexed_intervals(State &s, Type &value
 
     auto [index, index_poison] = indices_agg->extract(indices_vec, i);
     Pointer pointer(s.getMemory(), interval.ptr);
-    pointer += index;
+    pointer += index.sextOrTrunc(bits_for_offset);
 
     precise_interval.ptr = pointer();
     precise_interval.size = expr::mkUInt(
@@ -4625,7 +4625,7 @@ StateValue StoreIndexed::toSMT(State &s) const {
     s.addUB(std::move(index_poison));
 
     Pointer pointer(s.getMemory(), base_pointer);
-    pointer += index;
+    pointer += index.sextOrTrunc(bits_for_offset);
 
     s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars());
   }
