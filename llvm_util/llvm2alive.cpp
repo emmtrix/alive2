@@ -425,7 +425,7 @@ public:
         return make_unique<Incr>(*ty, value_name(i), *args.at(0), *args.at(1), 4, flags);
       } else if (fn_decl->getName().startswith("__emx_assume_step")) {
         return make_unique<AssumeStep>(*args.at(0), *args.at(1), 4);
-      } else if (fn_decl->getName() == "__emx_reduce") {
+      } else if (fn_decl->getName().startswith("__emx_reduce")) {
         get_global_variable(args.at(0))->setAccumulator(true);
         return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
       } else if (fn_decl->getName().startswith("__emx_non_poison")) {
