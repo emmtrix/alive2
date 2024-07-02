@@ -92,6 +92,8 @@ void GlobalVariable::print(ostream &os) const {
   os << " bytes, align " << align;
   if (is_accumulator)
     os << ", accumulator";
+  if (is_non_poison)
+    os << ", non_poison";
 }
 
 static expr get_global(State &s, const string &name, const expr *size,
@@ -120,9 +122,10 @@ static expr get_global(State &s, const string &name, const expr *size,
 StateValue GlobalVariable::toSMT(State &s) const {
   unsigned bid;
   expr size = expr::mkUInt(allocsize, bits_size_t);
-  return { get_global(s, getName(), arbitrary_size ? nullptr : &size, align,
-                      isconst, bid),
-           true };
+  expr value = get_global(s, getName(), arbitrary_size ? nullptr : &size, align,
+                          isconst, bid);
+  s.getMemory().setNonPoison(bid, is_non_poison);
+  return { std::move(value), true };
 }
 
 

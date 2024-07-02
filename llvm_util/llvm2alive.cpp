@@ -394,6 +394,19 @@ public:
       // (non-operand-bundle) version of @llvm.assume. its reason for
       // existing is that the optimizer is not free to remove
       // @llvm.assert, as it is @llvm.assume
+      
+      auto get_global_variable = [](Value *value) -> GlobalVariable* {
+        while (ConversionOp *conv = dynamic_cast<ConversionOp*>(value)) {
+          if (conv->getOp() != ConversionOp::BitCast) {
+            break;
+          }
+          value = &conv->getValue();
+        }
+        GlobalVariable *global = dynamic_cast<GlobalVariable*>(value);
+        assert(global);
+        return global;
+      };
+      
       if (fn_decl->getName() == "llvm.assert") {
         auto &ctx = i.getContext();
         assert(fn->getFunctionType() ==
@@ -413,18 +426,10 @@ public:
       } else if (fn_decl->getName().startswith("__emx_assume_step")) {
         return make_unique<AssumeStep>(*args.at(0), *args.at(1), 4);
       } else if (fn_decl->getName() == "__emx_reduce") {
-        Value *accumulator = args.at(0);
-        while (ConversionOp *conv = dynamic_cast<ConversionOp*>(accumulator)) {
-          if (conv->getOp() != ConversionOp::BitCast) {
-            break;
-          }
-          accumulator = &conv->getValue();
-        }
-        
-        GlobalVariable *global = dynamic_cast<GlobalVariable*>(accumulator);
-        assert(global);
-        global->setAccumulator(true);
-        
+        get_global_variable(args.at(0))->setAccumulator(true);
+        return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
+      } else if (fn_decl->getName().startswith("__emx_non_poison")) {
+        get_global_variable(args.at(0))->setNonPoison(true);
         return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
       } else if (fn_decl->getName() == "__emx_loop_continue") {
         return make_unique<LoopContinue>();

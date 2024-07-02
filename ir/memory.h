@@ -135,6 +135,7 @@ class Memory {
     unsigned char type = DATA_ANY;
 
     std::set<smt::expr> store_offsets;
+    bool is_non_poison = false;
 
     MemBlock() {}
     MemBlock(smt::expr &&val) : val(std::move(val)) {}
@@ -353,6 +354,8 @@ public:
     refined(const Memory &other, bool fncall,
             const std::vector<PtrInput> *set_ptrs = nullptr,
             const std::vector<PtrInput> *set_ptrs_other = nullptr) const;
+
+  void setNonPoison(unsigned bid, bool is_np);
 
   // Returns true if a nocapture pointer byte is not in the memory.
   smt::expr checkNocapture() const;

@@ -1040,6 +1040,9 @@ vector<Byte> Memory::load(const Pointer &ptr, unsigned bytes, set<expr> &undef,
   auto fn = [&](MemBlock &blk, unsigned bid, bool local, expr &&cond) {
     bool is_poison = (type & blk.type) == DATA_NONE;
     if (is_poison) {
+      if (blk.is_non_poison) {
+        getState().addAxiom(expr(false));
+      }
       for (unsigned i = 0; i < loaded_bytes; ++i) {
         loaded[i].add(poison, cond);
       }
@@ -1053,7 +1056,11 @@ vector<Byte> Memory::load(const Pointer &ptr, unsigned bytes, set<expr> &undef,
         assert(idx < blk_size);
         uint64_t max_idx = blk_size - bytes + idx;
         expr off = blk_offset + expr::mkUInt(idx, offset);
-        loaded[i].add(blk.val.load(off, max_idx), cond);
+        expr loaded_byte = blk.val.load(off, max_idx);
+        if (blk.is_non_poison) {
+          getState().addAxiom(!Byte(*this, expr(loaded_byte)).isPoison());
+        }
+        loaded[i].add(loaded_byte, cond);
       }
       undef.insert(blk.undef.begin(), blk.undef.end());
     }
@@ -2720,6 +2727,10 @@ ostream& operator<<(ostream &os, const Memory &m) {
     }
   }
   return os;
+}
+
+void Memory::setNonPoison(unsigned bid, bool is_np) {
+  non_local_block_val[bid].is_non_poison = is_np;
 }
 
 }
