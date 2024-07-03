@@ -58,6 +58,8 @@ public:
         unsigned flags = None);
 
   std::vector<Value*> operands() const override;
+  Op getOp() const { return op; }
+  unsigned getFlags() const { return flags; }
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
@@ -88,6 +90,11 @@ public:
     rm(rm), ex(ex) {}
 
   std::vector<Value*> operands() const override;
+  Op getOp() const { return op; }
+  FastMathFlags getFastMathFlags() const { return fmath; }
+  FpRoundingMode getRoundingMode() const { return rm; }
+  FpExceptionMode getExceptionMode() const { return ex; }
+
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;
   void rauw(const Value &what, Value &with) override;
@@ -488,6 +495,8 @@ class Phi final : public Instr {
 public:
   Phi(Type &type, std::string &&name, FastMathFlags fmath = {})
     : Instr(type, std::move(name)), fmath(fmath) {}
+
+  FastMathFlags getFastMathFlags() const { return fmath; }
 
   void addValue(Value &val, std::string &&BB_name);
   void removeValue(const std::string &BB_name);
