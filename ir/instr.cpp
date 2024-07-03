@@ -191,7 +191,7 @@ void BinOp::print(ostream &os) const {
   case SCmp:          str = "scmp "; break;
   }
 
-  os << getName() << " = " << str;
+  os << showName() << " = " << str;
 
   if (flags & NSW)
     os << "nsw ";
@@ -663,7 +663,7 @@ bool FpBinOp::isCommutative() const {
 }
 
 void FpBinOp::print(ostream &os) const {
-  os << getName() << " = " << getOpName() << " " << fmath << *lhs << ", " << rhs->getName();
+  os << showName() << " = " << getOpName() << " " << fmath << *lhs << ", " << rhs->getName();
   if (!rm.isDefault())
     os << ", rounding=" << rm;
   if (!ex.ignore())
@@ -1022,7 +1022,7 @@ void UnaryOp::print(ostream &os) const {
   case FFS:         str = "ffs "; break;
   }
 
-  os << getName() << " = " << str << *val;
+  os << showName() << " = " << str << *val;
 }
 
 StateValue UnaryOp::toSMT(State &s) const {
@@ -1160,7 +1160,7 @@ const char* FpUnaryOp::getOpName() const {
 }
 
 void FpUnaryOp::print(ostream &os) const {
-  os << getName() << " = " << getOpName() << " " << fmath << *val;
+  os << showName() << " = " << getOpName() << " " << fmath << *val;
   if (!rm.isDefault())
     os << ", rounding=" << rm;
   if (!ex.ignore())
@@ -1288,7 +1288,7 @@ void UnaryReductionOp::print(ostream &os) const {
   case UMin:  str = "reduce_umin "; break;
   }
 
-  os << getName() << " = " << str << print_type(val->getType())
+  os << showName() << " = " << str << print_type(val->getType())
      << val->getName();
 }
 
@@ -1361,7 +1361,7 @@ void TernaryOp::print(ostream &os) const {
   case UMulFixSat: str = "umul_fix_sat "; break;
   }
 
-  os << getName() << " = " << str << *a << ", " << *b << ", " << *c;
+  os << showName() << " = " << str << *a << ", " << *b << ", " << *c;
 }
 
 StateValue TernaryOp::toSMT(State &s) const {
@@ -1478,7 +1478,7 @@ const char* FpTernaryOp::getOpName() const {
 }
 
 void FpTernaryOp::print(ostream &os) const {
-  os << getName() << " = " << getOpName() << " " << fmath << *a << ", " << *b << ", " << *c;
+  os << showName() << " = " << getOpName() << " " << fmath << *a << ", " << *b << ", " << *c;
   if (!rm.isDefault())
     os << ", rounding=" << rm;
   if (!ex.ignore())
@@ -1587,7 +1587,7 @@ const char* TestOp::getOpName() const {
 }
 
 void TestOp::print(ostream &os) const {
-  os << getName() << " = " << getOpName() << " " << *lhs << ", " << *rhs;
+  os << showName() << " = " << getOpName() << " " << *lhs << ", " << *rhs;
 }
 
 StateValue TestOp::toSMT(State &s) const {
@@ -1685,7 +1685,7 @@ void ConversionOp::print(ostream &os) const {
   case Int2Ptr:  str = "int2ptr "; break;
   }
 
-  os << getName() << " = " << str;
+  os << showName() << " = " << str;
   if (flags & NNEG)
     os << "nneg ";
   if (flags & NSW)
@@ -1852,7 +1852,7 @@ const char* FpConversionOp::getOpName() const {
 }
 
 void FpConversionOp::print(ostream &os) const {
-  os << getName() << " = " << getOpName() << " ";
+  os << showName() << " = " << getOpName() << " ";
   if (flags & NNEG)
     os << "nneg ";
   os << *val << print_type(getType(), " to ", "");
@@ -2402,7 +2402,7 @@ void FnCall::rauw(const Value &what, Value &with) {
 
 void FnCall::print(ostream &os) const {
   if (!isVoid())
-    os << getName() << " = ";
+    os << showName() << " = ";
 
   os << "call " << print_type(getType())
      << (fnptr ? fnptr->getName() : fnName) << '(';
@@ -5096,7 +5096,7 @@ void Memcmp::rauw(const Value &what, Value &with) {
 }
 
 void Memcmp::print(ostream &os) const {
-  os << getName() << " = " << (is_bcmp ? "bcmp " : "memcmp ") << *ptr1
+  os << showName() << " = " << (is_bcmp ? "bcmp " : "memcmp ") << *ptr1
      << ", " << *ptr2 << ", " << *num;
 }
 

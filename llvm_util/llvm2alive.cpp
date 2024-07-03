@@ -486,6 +486,24 @@ public:
             *remove_bitcast(args.at(0)),
             *remove_bitcast(args.at(1)),
             *remove_bitcast(args.at(2)));
+        } else if (base_name == "__emx_annotate") {
+          llvm::Value *arg = i.getArgOperand(1);
+          while (true) {
+            if (llvm::ConstantExpr *constantExpr = dyn_cast<llvm::ConstantExpr>(arg)) {
+              if (constantExpr->getOpcode() == llvm::Instruction::GetElementPtr) {
+                // TODO: Check offset
+                arg = constantExpr->getOperand(0);
+                continue;
+              }
+            }
+            break;
+          }
+          llvm::Constant *initializer = cast<llvm::GlobalVariable>(arg)->getInitializer();
+          llvm::ConstantDataSequential* seq = cast<llvm::ConstantDataSequential>(initializer);
+          std::string name = seq->getAsString().str();
+          remove_bitcast(args.at(0))->setAnnotation(std::move(name));
+
+          return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
         }
       }
 
