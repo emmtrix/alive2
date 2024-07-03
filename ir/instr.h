@@ -294,6 +294,7 @@ public:
 
   Op getOp() const { return op; }
   Value& getValue() const { return *val; }
+  unsigned getFlags() const { return flags; }
   std::vector<Value*> operands() const override;
   bool propagatesPoison() const override;
   bool hasSideEffects() const override;

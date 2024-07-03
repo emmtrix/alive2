@@ -26,11 +26,10 @@ protected:
   Value(Type &type, std::string &&name)
     : type(type), name(std::move(name)) {}
 
-  void setName(std::string &&str) { name = std::move(str); }
-
 public:
   auto bits() const { return type.bits(); }
   auto& getName() const { return name; }
+  void setName(std::string &&str) { name = std::move(str); }
   auto& getType() const { return type; }
   bool isVoid() const { return type.isVoid(); }
 
