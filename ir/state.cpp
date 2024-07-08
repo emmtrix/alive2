@@ -277,12 +277,16 @@ const State::ValTy& State::exec(const Value &v) {
   assert(inserted);
   analysis.unused_vars.insert(&v);
 
+  cleanupTmpValues();
+
+  return I->second;
+}
+
+void State::cleanupTmpValues() {
   // cleanup potentially used temporary values due to undef rewriting
   while (i_tmp_values > 0) {
     tmp_values[--i_tmp_values] = StateValue();
   }
-
-  return I->second;
 }
 
 static expr eq_except_padding(const Memory &m, const Type &ty, const expr &e1,

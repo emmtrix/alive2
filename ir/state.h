@@ -245,6 +245,7 @@ public:
   const ValTy& exec(const Value &v);
   const StateValue& eval(const Value &val, bool quantify_nondet);
   const StateValue& operator[](const Value &val) { return eval(val, false); }
+  void cleanupTmpValues();
   const StateValue& getAndAddUndefs(const Value &val);
   // If undef_ub is true, UB is also added when val was undef
   const StateValue& getAndAddPoisonUB(const Value &val, bool undef_ub = false,
