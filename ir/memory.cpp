@@ -1041,7 +1041,7 @@ vector<Byte> Memory::load(const Pointer &ptr, unsigned bytes, set<expr> &undef,
     bool is_poison = (type & blk.type) == DATA_NONE;
     if (is_poison) {
       if (blk.is_non_poison) {
-        getState().addAxiom(expr(false));
+        state->addAxiom(!cond);
       }
       for (unsigned i = 0; i < loaded_bytes; ++i) {
         loaded[i].add(poison, cond);
@@ -1058,7 +1058,10 @@ vector<Byte> Memory::load(const Pointer &ptr, unsigned bytes, set<expr> &undef,
         expr off = blk_offset + expr::mkUInt(idx, offset);
         expr loaded_byte = blk.val.load(off, max_idx);
         if (blk.is_non_poison) {
-          getState().addAxiom(!Byte(*this, expr(loaded_byte)).isPoison());
+          Byte byte(*this, expr(loaded_byte));
+          expr np = byte.nonptrNonpoison();
+          np = np == expr::mkInt(-1, np);
+          state->addAxiom(cond.implies(!byte.isPtr() && np));
         }
         loaded[i].add(loaded_byte, cond);
       }
