@@ -568,6 +568,8 @@ check_refinement(Errors &errs, const Transform &t, State &src_state,
   }
   pre_src_forall &= tgt_state.getFnPre();
 
+  vector<pair<expr, expr>> annotation_subst; 
+
   auto mk_fml = [&](expr &&refines) -> expr {
     // from the check above we already know that
     // \exists v,v' . pre_tgt(v') && pre_src(v) is SAT (or timeout)
@@ -579,7 +581,7 @@ check_refinement(Errors &errs, const Transform &t, State &src_state,
       return std::move(refines);
 
     return axioms_expr &&
-            preprocess(t, qvars, uvars, pre && pre_src_forall.implies(refines));
+            preprocess(t, qvars, uvars, pre && pre_src_forall.implies(refines)).subst(annotation_subst);
   };
 
   auto check = [&](expr &&e, auto &&printer, const char *msg) {
@@ -676,6 +678,54 @@ check_refinement(Errors &errs, const Transform &t, State &src_state,
           print_value, "Target's return value is more undefined");
   }
 
+  // Check annotated values
+  map<string, const Annotate*> tgt_annotations;
+  AndExpr annotation_axioms;
+  for (const Instr &instr : t.tgt.instrs()) {
+    if (const Annotate *annotate = dynamic_cast<const Annotate*>(&instr)) {
+      tgt_annotations.insert({
+        annotate->getAnnotation(),
+        annotate
+      });
+    }
+  }
+
+  for (auto &src_instr : t.src.instrs()) {
+    if (const Annotate *src_annotate = dynamic_cast<const Annotate*>(&src_instr)) {
+      std::cout << "Checking: " << src_annotate->getAnnotation() << std::endl;
+      const Annotate *tgt_annotate = tgt_annotations.at(src_annotate->getAnnotation());
+      auto src_val = src_state.at(src_instr);
+      auto tgt_val = tgt_state.at(*tgt_annotate);
+      
+      auto [poison_cnstr, value_cnstr] = src_instr.getType().refines(
+        src_state, tgt_state, src_val->val, tgt_val->val
+      );
+
+      auto print_value = [&](ostream &s, const Model &m) {
+        s << "Source value: ";
+        print_model_val(s, src_state, m, &src_instr, src_instr.getType(), src_val->val);
+        s << "\nTarget value: ";
+        print_model_val(s, tgt_state, m, &src_instr, src_instr.getType(), tgt_val->val);
+      };
+
+      auto instr_dom = src_val->return_domain && tgt_val->return_domain;
+      if (!config::disallow_ub_exploitation) {
+        if (!check(instr_dom && !poison_cnstr, print_value, "Target is more poisonous than source")) {
+          return;
+        }
+        annotation_axioms.add(instr_dom.implies(poison_cnstr));
+      }
+
+      if (!check(instr_dom && !value_cnstr, print_value, "Value mismatch")) {
+        return;
+      }
+      annotation_axioms.add(instr_dom.implies(value_cnstr));
+
+      annotation_subst.emplace_back(make_pair(expr(src_val->val.value), expr(tgt_val->val.value)));
+    }
+  }
+  std::cout << "Annotated values checked." << std::endl;
+
   // 5. Check value
   CHECK(dom && !value_cnstr, print_value, "Value mismatch");
 
@@ -695,7 +745,7 @@ check_refinement(Errors &errs, const Transform &t, State &src_state,
       << "\nTarget value: " << Byte(tgt_mem, m[tgt_mem.raw_load(p, undef)()]);
   };
 
-  CHECK(dom && !(memory_cnstr0.isTrue() ? memory_cnstr0
+  CHECK(dom && annotation_axioms() && !(memory_cnstr0.isTrue() ? memory_cnstr0
                                         : value_cnstr && memory_cnstr0),
         print_ptr_load, "Mismatch in memory");
 

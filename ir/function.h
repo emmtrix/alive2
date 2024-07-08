@@ -136,6 +136,13 @@ public:
 
   const BasicBlock& getFirstBB() const { return *BB_order[0]; }
   BasicBlock& getFirstBB() { return *BB_order[0]; }
+  BasicBlock& getEntryBB() {
+    if (BB_order[0]->getName() == "#init") {
+      return *BB_order[1];
+    } else {
+      return *BB_order[0];
+    }
+  }
   const BasicBlock& getLastBB() const { return *BB_order[BB_order.size() - 1]; }
   BasicBlock& getLastBB() { return *BB_order[BB_order.size() - 1]; }
   const BasicBlock& getSinkBB() const { return sink_bb; }

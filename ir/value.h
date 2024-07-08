@@ -22,7 +22,6 @@ class VoidValue;
 class Value {
   Type &type;
   std::string name;
-  std::string annotation;
 
 protected:
   Value(Type &type, std::string &&name)
@@ -32,20 +31,9 @@ public:
   auto bits() const { return type.bits(); }
   auto& getName() const { return name; }
   void setName(std::string &&str) { name = std::move(str); }
-  auto& getAnnotation() const { return annotation; }
-  void setAnnotation(std::string &&str) { annotation = std::move(str); }
   auto& getType() const { return type; }
   bool isVoid() const { return type.isVoid(); }
-
-  std::string showName() const {
-    std::ostringstream stream;
-    stream << name;
-    if (annotation.size() > 0) {
-      stream << " : " << annotation;
-    }
-    return stream.str();
-  }
-
+  
   virtual void rauw(const Value &what, Value &with);
   virtual void print(std::ostream &os) const = 0;
   virtual StateValue toSMT(State &s) const = 0;

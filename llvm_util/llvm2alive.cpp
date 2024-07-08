@@ -500,10 +500,8 @@ public:
           }
           llvm::Constant *initializer = cast<llvm::GlobalVariable>(arg)->getInitializer();
           llvm::ConstantDataSequential* seq = cast<llvm::ConstantDataSequential>(initializer);
-          std::string name = seq->getAsString().str();
-          remove_bitcast(args.at(0))->setAnnotation(std::move(name));
-
-          return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
+          std::string name = seq->getAsCString().str();
+          return make_unique<Annotate>(*ty, value_name(i), *args.at(0), std::move(name));
         }
       }
 

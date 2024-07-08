@@ -1500,6 +1500,25 @@ public:
 };
 
 
+class Annotate final : public Instr {
+  Value *value;
+  std::string annotation;
+public:
+  Annotate(Type &type, std::string &&name, Value &value, std::string &&annotation)
+    : Instr(type, std::move(name)), value(&value), annotation(std::move(annotation)) {}
+  
+  const std::string &getAnnotation() const { return annotation; }
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  bool hasSideEffects() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+};
+
 const ConversionOp *isCast(ConversionOp::Op op, const Value &v);
 Value *isNoOp(const Value &v);
 }
