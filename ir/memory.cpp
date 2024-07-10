@@ -2341,10 +2341,27 @@ static expr load_propagate(const expr &array,
   }
 
   expr cond, then, els;
+  expr arr, next_arr, idx, val;
   if (array.isIf(cond, then, els)) {
     return expr::mkIf(cond,
                       load_propagate(then, index, depth - 1),
                       load_propagate(els, index, depth - 1));
+  } else if (array.isStore(next_arr, idx, val)) {
+    arr = array;
+    while (arr.isStore(next_arr, idx, val)) {
+      if ((idx == index).isTrue()) {
+        return val;
+      }
+
+      auto res = check_expr(idx == index);
+      if (!res.isUnsat()) {
+        break;
+      }
+
+      arr = next_arr;
+    }
+    
+    return load_propagate(arr, index, depth - 1);
   } else {
     return array.load(index);
   }
