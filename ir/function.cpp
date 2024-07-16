@@ -146,6 +146,7 @@ unsigned Function::FnDecl::hash() const {
     hash_ty(*ty);
   }
   hash_ty(*output);
+  hash.add(is_varargs * 32);
   return hash();
 }
 
@@ -860,6 +861,9 @@ void Function::print(ostream &os, bool print_header) const {
           os << ", ";
         os << input.second << *input.first;
         first = false;
+      }
+      if (decl.is_varargs) {
+        os << (first ? "..." : ", ...");
       }
       os << ')' << decl.attrs << '\n';
     }
