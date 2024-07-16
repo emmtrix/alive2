@@ -909,7 +909,7 @@ StateValue FpBinOp::toSMT(State &s) const {
 
       ostringstream name;
       name << getOpName() << "." << ty;
-      return uf_float(name.str(), {a, b}, a.value, fmath, isCommutative());
+      return uf_float(std::move(name).str(), {a, b}, a.value, fmath, isCommutative());
     };
   } else {
     switch (op) {
@@ -1212,7 +1212,7 @@ StateValue FpUnaryOp::toSMT(State &s) const {
 
       ostringstream name;
       name << getOpName() << "." << ty;
-      return uf_float(name.str(), {v}, v.value, fmath, false);
+      return uf_float(std::move(name).str(), {v}, v.value, fmath, false);
     };
   } else {
     switch (op) {
@@ -1522,7 +1522,7 @@ StateValue FpTernaryOp::toSMT(State &s) const {
 
       ostringstream name;
       name << getOpName() << "." << ty;
-      return uf_float(name.str(), {a, b, c}, a.value, fmath);
+      return uf_float(std::move(name).str(), {a, b, c}, a.value, fmath);
     };
   } else {
     switch (op) {
@@ -1616,7 +1616,7 @@ StateValue TestOp::toSMT(State &s) const {
       s.doesApproximation("uf_float", true);
       ostringstream name;
       name << getOpName() << "." << ty;
-      return uf_float(name.str(), {v}, expr::mkUInt(0, 1));
+      return uf_float(std::move(name).str(), {v}, expr::mkUInt(0, 1));
     };
   } else {
     switch (op) {
@@ -2964,7 +2964,8 @@ StateValue FCmp::toSMT(State &s) const {
 
         ostringstream os;
         os << name << "." << ty;
-        auto value = uf_float(os.str(), {lhs, rhs}, expr::mkUInt(0, 1), fmath, commutative);
+        auto value = uf_float(std::move(os).str(), {lhs, rhs},
+                              expr::mkUInt(0, 1), fmath, commutative);
 
         if (negate) {
           value.value = ~value.value;
