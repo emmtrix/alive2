@@ -1097,7 +1097,7 @@ vector<Byte> Memory::load(const Pointer &ptr, unsigned bytes, set<expr> &undef,
   auto fn = [&](MemBlock &blk, const Pointer &ptr, expr &&cond) {
     bool is_poison = (type & blk.type) == DATA_NONE;
     if (is_poison) {
-      if (blk.is_non_poison) {
+      if (blk.non_poison_mode != NonPoisonMode::Poison) {
         state->addAxiom(!cond);
       }
       for (unsigned i = 0; i < loaded_bytes; ++i) {
@@ -1115,11 +1115,16 @@ vector<Byte> Memory::load(const Pointer &ptr, unsigned bytes, set<expr> &undef,
         uint64_t max_idx = blk_size - bytes + idx;
         expr off = blk_offset + expr::mkUInt(idx, offset);
         expr loaded_byte = ::raw_load(blk.val, off, max_idx);
-        if (blk.is_non_poison) {
+        if (blk.non_poison_mode == NonPoisonMode::Data) {
           Byte byte(*this, expr(loaded_byte));
           expr np = byte.nonptrNonpoison();
           np = np == expr::mkInt(-1, np);
           state->addAxiom(cond.implies(!byte.isPtr() && np));
+        } else if (blk.non_poison_mode == NonPoisonMode::Pointer) {
+          Byte byte(*this, expr(loaded_byte));
+          expr np = byte.ptrNonpoison();
+          np = np == expr::mkInt(-1, np);
+          state->addAxiom(cond.implies(byte.isPtr() && np));
         }
         loaded[i].add(loaded_byte, cond);
       }
@@ -2892,8 +2897,8 @@ ostream& operator<<(ostream &os, const Memory &m) {
   return os;
 }
 
-void Memory::setNonPoison(unsigned bid, bool is_np) {
-  non_local_block_val[bid].is_non_poison = is_np;
+void Memory::setNonPoisonMode(unsigned bid, NonPoisonMode mode) {
+  non_local_block_val[bid].non_poison_mode = mode;
 }
 
 }

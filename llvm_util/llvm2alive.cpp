@@ -423,8 +423,11 @@ public:
       } else if (fn_decl->getName().startswith("__emx_reduce")) {
         get_global_variable(args.at(0))->setAccumulator(true);
         return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
-      } else if (fn_decl->getName().startswith("__emx_non_poison")) {
-        get_global_variable(args.at(0))->setNonPoison(true);
+      } else if (fn_decl->getName().startswith("__emx_non_poison_data")) {
+        get_global_variable(args.at(0))->setNonPoisonMode(NonPoisonMode::Data);
+        return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
+      } else if (fn_decl->getName().startswith("__emx_non_poison_pointer")) {
+        get_global_variable(args.at(0))->setNonPoisonMode(NonPoisonMode::Pointer);
         return make_unique<Assume>(*get_operand(llvm::ConstantInt::getTrue(i.getContext())), Assume::AndNonPoison);
       } else if (fn_decl->getName() == "__emx_loop_continue") {
         return make_unique<LoopContinue>();

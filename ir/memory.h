@@ -24,6 +24,10 @@ namespace smt { class Model; }
 
 namespace IR {
 
+enum class NonPoisonMode {
+  Poison, Data, Pointer
+};
+
 class Memory;
 class SMTMemoryAccess;
 class State;
@@ -142,7 +146,7 @@ class Memory {
     unsigned char type = DATA_ANY;
 
     std::set<smt::expr> store_offsets;
-    bool is_non_poison = false;
+    NonPoisonMode non_poison_mode = NonPoisonMode::Poison;
 
     MemBlock() {}
     MemBlock(smt::expr &&val) : val(std::move(val)) {}
@@ -364,7 +368,7 @@ public:
             const std::vector<PtrInput> *set_ptrs = nullptr,
             const std::vector<PtrInput> *set_ptrs_other = nullptr) const;
 
-  void setNonPoison(unsigned bid, bool is_np);
+  void setNonPoisonMode(unsigned bid, NonPoisonMode mode);
 
   // Returns true if a nocapture pointer byte is not in the memory.
   smt::expr checkNocapture() const;

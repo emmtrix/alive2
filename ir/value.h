@@ -6,6 +6,7 @@
 #include "ir/attrs.h"
 #include "ir/state.h"
 #include "ir/type.h"
+#include "ir/memory.h"
 #include "smt/expr.h"
 #include <ostream>
 #include <sstream>
@@ -79,7 +80,6 @@ public:
   StateValue toSMT(State &s) const override;
 };
 
-
 class GlobalVariable final : public Value {
   // The size of this global variable (in bytes)
   uint64_t allocsize;
@@ -88,7 +88,7 @@ class GlobalVariable final : public Value {
   bool arbitrary_size;
 
   bool is_accumulator = false;
-  bool is_non_poison = false;
+  NonPoisonMode non_poison_mode = NonPoisonMode::Poison;
 public:
   GlobalVariable(Type &type, std::string &&name, uint64_t allocsize,
                  unsigned align, bool isconst, bool arbitrary_size) :
@@ -98,8 +98,8 @@ public:
   bool isAccumulator() const { return is_accumulator; }
   void setAccumulator(bool is_acc) { is_accumulator = is_acc; }
 
-  bool isNonPoison() const { return is_non_poison; }
-  void setNonPoison(bool is_np) { is_non_poison = is_np; }
+  NonPoisonMode getNonPoisonMode() const { return non_poison_mode; }
+  void setNonPoisonMode(NonPoisonMode np) { non_poison_mode = np; }
 
   uint64_t size() const { return allocsize; }
   bool isArbitrarySize() const { return arbitrary_size; }
