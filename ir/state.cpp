@@ -702,6 +702,11 @@ expr State::getPath(BasicBlock &bb) const {
   if (&f.getFirstBB() == &bb)
     return true;
   
+  if (predecessor_data.find(&bb) == predecessor_data.end()) {
+    std::cout << "No predecessor_data: " << bb.getName() << std::endl;
+    assert(false && "predecessor_data not available");
+  }
+
   OrExpr path;
   for (auto &[src, data] : predecessor_data.at(&bb)) {
     path.add(data.path);

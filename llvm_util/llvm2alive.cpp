@@ -433,6 +433,14 @@ public:
         return make_unique<LoopContinue>();
       } else if (fn_decl->getName() == "__emx_loop_break") {
         return make_unique<LoopBreak>();
+      } else if (fn_decl->getName() == "__emx_unsupported_begin" ||
+                 fn_decl->getName() == "__emx_unsupported_end") {
+        llvm::BranchInst *branch = cast<llvm::BranchInst>(i.getNextNonDebugInstruction());
+        UnsupportedRegion::Op op =
+          fn_decl->getName() == "__emx_unsupported_begin" ?
+          UnsupportedRegion::Begin : UnsupportedRegion::End; 
+        unsigned id = cast<llvm::ConstantInt>(i.getArgOperand(0))->getLimitedValue();
+        return make_unique<UnsupportedRegion>(op, getBB(branch->getSuccessor(0)), id);
       }
 
       llvm::ItaniumPartialDemangler demangler;

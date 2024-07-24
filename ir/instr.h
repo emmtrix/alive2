@@ -573,6 +573,30 @@ public:
     dup(Function &f, const std::string &suffix) const override;
 };
 
+class UnsupportedRegion final : public JumpInstr {
+public:
+  enum Op { Begin, End };
+private:
+  Op op;
+  const BasicBlock *dst;
+  unsigned id;
+public:
+  UnsupportedRegion(Op op, const BasicBlock &dst, unsigned id) :
+    JumpInstr("unsupported"), op(op), dst(&dst), id(id) {}
+
+  Op getOp() const { return op; }
+  auto& getDst() const { return *dst; }
+  unsigned getId() const { return id; }
+
+  void replaceTargetWith(const BasicBlock *F, const BasicBlock *T) override;
+  std::vector<Value*> operands() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+};
 
 class Switch final : public JumpInstr {
   Value *value;

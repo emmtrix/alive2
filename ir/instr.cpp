@@ -3222,6 +3222,10 @@ const BasicBlock& JumpInstr::target_iterator::operator*() const {
   if (auto sw = dynamic_cast<const Switch*>(instr))
     return idx == 0 ? *sw->getDefault() : *sw->getTarget(idx-1).second;
 
+  if (auto unsupported = dynamic_cast<const UnsupportedRegion*>(instr)) {
+    return unsupported->getDst();
+  }
+
   UNREACHABLE();
 }
 
@@ -3233,6 +3237,8 @@ JumpInstr::target_iterator JumpInstr::it_helper::end() const {
     idx = br->getFalse() ? 2 : 1;
   } else if (auto sw = dynamic_cast<const Switch*>(instr)) {
     idx = sw->getNumTargets() + 1;
+  } else if (dynamic_cast<const UnsupportedRegion*>(instr)) {
+    idx = 1;
   } else {
     UNREACHABLE();
   }
@@ -3290,6 +3296,40 @@ unique_ptr<Instr> Branch::dup(Function &f, const string &suffix) const {
   if (dst_false)
     return make_unique<Branch>(*cond, *dst_true, *dst_false);
   return make_unique<Branch>(*dst_true);
+}
+
+
+void UnsupportedRegion::replaceTargetWith(const BasicBlock *from, const BasicBlock *to) {
+  if (dst == from)
+    dst = to;
+}
+
+vector<Value*> UnsupportedRegion::operands() const {
+  return {};
+}
+
+void UnsupportedRegion::rauw(const Value &what, Value &with) {
+}
+
+void UnsupportedRegion::print(ostream &os) const {
+  switch (op) {
+    case Begin: os << "unsupported.begin "; break;
+    case End:   os << "unsupported.end "; break;
+  }
+  os << "label " << dst->getName() << ", id " << id;
+}
+
+StateValue UnsupportedRegion::toSMT(State &s) const {
+  s.addJump(*dst);
+  return {};
+}
+
+expr UnsupportedRegion::getTypeConstraints(const Function &f) const {
+  return true;
+}
+
+unique_ptr<Instr> UnsupportedRegion::dup(Function &f, const string &suffix) const {
+  return make_unique<UnsupportedRegion>(op, *dst, id);
 }
 
 
