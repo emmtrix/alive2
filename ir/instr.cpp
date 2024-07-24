@@ -4323,12 +4323,23 @@ void LoadStrided::print(ostream &os) const {
 }
 
 StateValue LoadStrided::toSMT(State &s) const {
-  // TODO
-  auto &p = s.getWellDefinedPtr(*ptr);
-  check_can_load(s, p);
-  auto [sv, ub] = s.getMemory().load(p, getType(), 1);
-  s.addUB(std::move(ub));
-  return sv;
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, base_pointer);
+  
+  auto &element_type = getType().getAsAggregateType()->getChild(0);
+  auto stride_val = s[*stride];
+
+  vector<StateValue> values;
+  for (unsigned i = 0, e = getType().getAsAggregateType()->numElementsConst(); i != e; ++i) {
+    Pointer pointer(s.getMemory(), base_pointer);
+    pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
+
+    auto [value, ub] = s.getMemory().load(pointer(), element_type, 1);
+    s.addUB(std::move(ub));
+    values.emplace_back(value);
+  }
+
+  return getType().getAsAggregateType()->aggregateVals(values);
 }
 
 expr LoadStrided::getTypeConstraints(const Function &f) const {
@@ -4653,7 +4664,8 @@ StateValue StoreIndexed::toSMT(State &s) const {
     Pointer pointer(s.getMemory(), base_pointer);
     pointer += index.sextOrTrunc(bits_for_offset);
 
-    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars());
+    auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars(), enable_store);
   }
 
   return {};
