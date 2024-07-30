@@ -702,17 +702,17 @@ expr State::getPath(BasicBlock &bb) const {
   if (&f.getFirstBB() == &bb)
     return true;
   
-  if (predecessor_data.find(&bb) == predecessor_data.end()) {
-    std::cout << "No predecessor_data: " << bb.getName() << std::endl;
-    assert(false && "predecessor_data not available");
-  }
+  auto I = predecessor_data.find(&bb);
+  if (I == predecessor_data.end())
+    return false; // Block is unreachable
 
   OrExpr path;
-  for (auto &[src, data] : predecessor_data.at(&bb)) {
+  for (auto &[src, data] : I->second) {
     path.add(data.path);
   }
-  return path();
+  return std::move(path)();
 }
+
 
 expr State::getUB(BasicBlock &bb) const {
   if (&f.getFirstBB() == &bb)
@@ -724,7 +724,6 @@ expr State::getUB(BasicBlock &bb) const {
   }
   return *UB();
 }
-
 
 void State::cleanup(const Value &val) {
   values.erase(&val);
