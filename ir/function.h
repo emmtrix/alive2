@@ -38,8 +38,8 @@ public:
   const std::string& getName() const { return name; }
 
   size_t size() const { return m_instrs.size(); }
-  Instr& at(size_t index) { return *m_instrs[index]; }
-  std::unique_ptr<Instr>&& moveAt(size_t index) { return std::move(m_instrs[index]); }
+  const Instr& at(size_t index) const { return *m_instrs.at(index); }
+  Instr& at(size_t index) { return *m_instrs.at(index); }
 
   void setInstrs(std::vector<std::unique_ptr<Instr>> &&instrs) {
     m_instrs = std::move(instrs);
@@ -61,6 +61,7 @@ public:
   util::const_strip_unique_ptr<decltype(m_instrs)> instrs() const {
     return m_instrs;
   }
+  const Instr& back() const { return *m_instrs.back(); }
   Instr& back() { return *m_instrs.back(); }
   std::vector<Phi*> phis() const;
 
@@ -135,15 +136,10 @@ public:
   void fixupTypes(const smt::Model &m);
   void rauw(const Value &what, Value &with);
 
+  size_t getNumBBs() const { return BB_order.size(); }
   const BasicBlock& getFirstBB() const { return *BB_order[0]; }
   BasicBlock& getFirstBB() { return *BB_order[0]; }
-  BasicBlock& getEntryBB() {
-    if (BB_order[0]->getName() == "#init") {
-      return *BB_order[1];
-    } else {
-      return *BB_order[0];
-    }
-  }
+  BasicBlock& getEntryBB();
   const BasicBlock& getLastBB() const { return *BB_order[BB_order.size() - 1]; }
   BasicBlock& getLastBB() { return *BB_order[BB_order.size() - 1]; }
   const BasicBlock& getSinkBB() const { return sink_bb; }

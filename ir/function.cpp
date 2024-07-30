@@ -179,6 +179,14 @@ void Function::fixupTypes(const Model &m) {
   }
 }
 
+BasicBlock& Function::getEntryBB() {
+  if (BB_order[0]->getName() == "#init") {
+    return *BB_order[1];
+  } else {
+    return *BB_order[0];
+  }
+}
+
 BasicBlock& Function::getBB(string_view name, bool push_front) {
   assert(name != "#sink");
   auto p = BBs.try_emplace(string(name), name);
