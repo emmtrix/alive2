@@ -223,14 +223,6 @@ BasicBlock& Function::insertBBAfter(string_view name, const BasicBlock &bb) {
   return p.first->second;
 }
 
-BasicBlock& Function::addBB(string_view name) {
-  auto p = BBs.try_emplace(string(name), name);
-  if (p.second) {
-    BB_order.push_back(&p.first->second);
-  }
-  return p.first->second;
-}
-
 void Function::removeBB(BasicBlock &BB) {
   assert(BB.getName() != "#sink");
   BBs.erase(BB.getName());
@@ -1197,16 +1189,6 @@ void LoopAnalysis::run() {
 BasicBlock* LoopAnalysis::getParent(BasicBlock *bb) const {
   auto I = parent.find(bb);
   return I != parent.end() ? I->second : nullptr;
-}
-
-bool LoopAnalysis::isDescendent(BasicBlock *bb, BasicBlock *ancestor) const {
-  while (bb != nullptr) {
-    if (bb == ancestor) {
-      return true;
-    }
-    bb = getParent(ancestor);
-  }
-  return false;
 }
 
 void LoopAnalysis::printDot(ostream &os) const {

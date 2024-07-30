@@ -149,9 +149,6 @@ public:
   const BasicBlock& bbOf(const Instr &i) const;
 
   BasicBlock& insertBBAfter(std::string_view name, const BasicBlock &bb);
-  BasicBlock& addBB(std::string_view name);
-
-  size_t getNumBBs() const { return BB_order.size(); }
 
   void removeBB(BasicBlock &BB);
 
@@ -313,7 +310,6 @@ public:
   auto& getRoots() const { return roots; }
   auto& getLoopForest() const { return forest; }
   BasicBlock* getParent(BasicBlock *bb) const;
-  bool isDescendent(BasicBlock *bb, BasicBlock *ancestor) const;
 
   void printDot(std::ostream &os) const;
 };
