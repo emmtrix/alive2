@@ -3494,6 +3494,7 @@ bool Return::isTerminator() const {
   return true;
 }
 
+
 vector<Value*> LoopContinue::operands() const {
   return { };
 }
