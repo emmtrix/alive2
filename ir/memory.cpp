@@ -1358,8 +1358,7 @@ static expr mk_liveness_array() {
 }
 
 void Memory::mkNonPoisonAxioms(bool local) const {
-  expr offset
-    = expr::mkFreshVar("#off", expr::mkUInt(0, Pointer::bitsShortOffset()));
+  expr offset = expr::mkVar("#axoff", Pointer::bitsShortOffset());
 
   unsigned bid = 0;
   for (auto &block : local ? local_block_val : non_local_block_val) {
@@ -1406,8 +1405,7 @@ void Memory::mkNonlocalValAxioms(bool skip_consts) const {
   if (!does_ptr_mem_access && !(num_sub_byte_bits && isAsmMode()))
     return;
 
-  expr offset
-    = expr::mkFreshVar("#off", expr::mkUInt(0, Pointer::bitsShortOffset()));
+  expr offset = expr::mkVar("#axoff", Pointer::bitsShortOffset());
 
   for (unsigned i = 0, e = numNonlocals(); i != e; ++i) {
     if (always_noread(i, true))
@@ -1989,6 +1987,9 @@ void Memory::mkLocalDisjAddrAxioms(const expr &allocated, const expr &short_bid,
   unsigned var_bw = bits_ptr_address - align_bits - Pointer::hasLocalBit();
   auto addr_var = expr::mkFreshVar("local_addr", expr::mkUInt(0, var_bw));
   state->addQuantVar(addr_var);
+
+  if (!Pointer::hasLocalBit())
+    state->addPre(addr_var != 0);
 
   expr blk_addr = addr_var.concat_zeros(align_bits);
   expr full_addr = Pointer::hasLocalBit()

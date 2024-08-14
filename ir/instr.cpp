@@ -4166,7 +4166,7 @@ StateValue GEP::toSMT(State &s) const {
 
       // try to simplify the pointer
       if (all_zeros.isFalse())
-        ptr.inbounds();
+        ptr.inbounds(true);
     }
 
     return { std::move(ptr).release(), non_poison() };
