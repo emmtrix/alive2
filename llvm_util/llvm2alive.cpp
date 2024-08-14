@@ -16,7 +16,7 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Operator.h"
-#ifdef LLVM_14
+#if LLVM_VERSION_MAJOR <= 14
 #include "llvm/Analysis/AliasAnalysis.h"
 #else
 #include "llvm/Support/ModRef.h"
@@ -284,7 +284,7 @@ public:
       flags |= BinOp::NUW;
     if (isa<llvm::PossiblyExactOperator>(i) && i.isExact())
       flags = BinOp::Exact;
-    #ifndef LLVM_14
+    #if LLVM_VERSION_MAJOR > 14
     if (const auto *PDI = dyn_cast<llvm::PossiblyDisjointInst>(&i)) {
       if (PDI->isDisjoint())
         flags |= BinOp::Disjoint;
@@ -309,7 +309,7 @@ public:
       }
       if (has_non_fp) {
         unsigned flags = 0;
-        #ifndef LLVM_14 
+        #if LLVM_VERSION_MAJOR > 14 
         if (const auto *NNI = dyn_cast<llvm::PossiblyNonNegInst>(&i)) {
           if (NNI->hasNonNeg())
             flags |= ConversionOp::NNEG;
@@ -327,7 +327,7 @@ public:
 
     FpConversionOp::Op op;
     unsigned flags = 0;
-    #ifndef LLVM_14
+    #if LLVM_VERSION_MAJOR > 14
     if (const auto *NNI = dyn_cast<llvm::PossiblyNonNegInst>(&i)) {
       if (NNI->hasNonNeg())
         flags |= FpConversionOp::NNEG;
@@ -494,7 +494,7 @@ public:
 
     unique_ptr<Instr> val = std::move(call);
     
-    #ifndef LLVM_14
+    #if LLVM_VERSION_MAJOR > 14
     auto range_check = [&](const auto &attr) {
       auto *ptr = val.get();
       BB->addInstr(std::move(val));
@@ -633,7 +633,7 @@ public:
     if (!ty || !ptr)
       return error(i);
 
-    #ifdef LLVM_14
+    #if LLVM_VERSION_MAJOR <= 14
     auto gep =
         make_unique<GEP>(*ty, value_name(i), *ptr, i.isInBounds(), false, false);
     #else
@@ -687,7 +687,7 @@ public:
         continue;
       }
 
-      #ifdef LLVM_14
+      #if LLVM_VERSION_MAJOR <= 14
       gep->addIdx(DL().getTypeAllocSize(I.getIndexedType()).getKnownMinValue(),
             *op);
       #else
@@ -764,7 +764,7 @@ public:
     if (!ty || !val)
       return error(i);
 
-    #ifndef LLVM_14
+    #if LLVM_VERSION_MAJOR > 14
     auto *Fn = i.getFunction();
     if (Fn->hasRetAttribute(llvm::Attribute::Range))
       val = handleRangeAttr(Fn->getRetAttribute(llvm::Attribute::Range), *val);
@@ -1135,7 +1135,7 @@ public:
     case llvm::Intrinsic::experimental_constrained_fptosi:
     case llvm::Intrinsic::experimental_constrained_fptoui:
     case llvm::Intrinsic::experimental_constrained_fpext:
-    #ifndef LLVM_14
+    #if LLVM_VERSION_MAJOR > 14
     case llvm::Intrinsic::fptrunc_round:
     #endif
     case llvm::Intrinsic::experimental_constrained_fptrunc:
@@ -1156,7 +1156,7 @@ public:
       case llvm::Intrinsic::experimental_constrained_fptosi:  op = FpConversionOp::FPToSInt; break;
       case llvm::Intrinsic::experimental_constrained_fptoui:  op = FpConversionOp::FPToUInt; break;
       case llvm::Intrinsic::experimental_constrained_fpext:   op = FpConversionOp::FPExt; break;
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case llvm::Intrinsic::fptrunc_round:
       #endif
       case llvm::Intrinsic::experimental_constrained_fptrunc: op = FpConversionOp::FPTrunc; break;
@@ -1188,7 +1188,7 @@ public:
         make_unique<FCmp>(*ty, value_name(i), cond, *a, *b, FastMathFlags(),
                           parse_exceptions(i), is_signaling);
     }
-    #ifndef LLVM_14
+    #if LLVM_VERSION_MAJOR > 14
     case llvm::Intrinsic::is_fpclass:
     {
       PARSE_BINOP();
@@ -1263,7 +1263,7 @@ public:
     case llvm::Intrinsic::instrprof_increment_step:
     case llvm::Intrinsic::instrprof_value_profile:
     case llvm::Intrinsic::prefetch:
-    #ifdef LLVM_14
+    #if LLVM_VERSION_MAJOR <= 14
     case llvm::Intrinsic::experimental_noalias_scope_decl:
     #endif
       return NOP(i);
@@ -1375,12 +1375,12 @@ public:
 
       // non-relevant for correctness
       case LLVMContext::MD_loop:
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case LLVMContext::MD_nosanitize:
       #endif
       case LLVMContext::MD_prof:
       case LLVMContext::MD_unpredictable:
-      #ifdef LLVM_14 // TODO: Remove?
+      #if LLVM_VERSION_MAJOR <= 14 // TODO: Remove?
       case LLVMContext::MD_noalias:
       case LLVMContext::MD_tbaa:
       case LLVMContext::MD_tbaa_struct:
@@ -1404,7 +1404,7 @@ public:
     return true;
   }
 
-  #ifndef LLVM_14      
+  #if LLVM_VERSION_MAJOR > 14      
   unique_ptr<Instr>
   handleRangeAttrNoInsert(const llvm::Attribute &attr, Value &val) {
     auto CR = attr.getValueAsConstantRange();
@@ -1498,13 +1498,13 @@ public:
         attrs.set(ParamAttrs::NoUndef);
         break;
 
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case llvm::Attribute::Range:
         newval = handleRangeAttr(llvmattr, val);
         break;
       #endif
 
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case llvm::Attribute::NoFPClass:
         attrs.set(ParamAttrs::NoFPClass);
         attrs.nofpclass = (uint16_t)llvmattr.getNoFPClass();
@@ -1515,13 +1515,13 @@ public:
         attrs.set(ParamAttrs::Returned);
         break;
 
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case llvm::Attribute::AllocatedPointer:
         attrs.set(ParamAttrs::AllocPtr);
         break;
       #endif
 
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case llvm::Attribute::AllocAlign:
         attrs.set(ParamAttrs::AllocAlign);
         break;
@@ -1566,7 +1566,7 @@ public:
         attrs.align = max(attrs.align, llvmattr.getAlignment()->value());
         break;
 
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case llvm::Attribute::NoFPClass:
         attrs.set(FnAttrs::NoFPClass);
         attrs.nofpclass = (uint16_t)llvmattr.getNoFPClass();
@@ -1629,7 +1629,7 @@ public:
           attrs.allocsize_1 = *args.second;
         break;
       }
-      #ifndef LLVM_14
+      #if LLVM_VERSION_MAJOR > 14
       case llvm::Attribute::AllocKind: {
         auto kind = llvmattr.getAllocKind();
         if ((kind & llvm::AllocFnKind::Alloc) != llvm::AllocFnKind::Unknown)
@@ -1666,7 +1666,7 @@ public:
     }
   }
 
-  #ifndef LLVM_14
+  #if LLVM_VERSION_MAJOR > 14
   MemoryAccess handleMemAttrs(const llvm::MemoryEffects &e) {
     MemoryAccess attrs;
     attrs.setNoAccess();
@@ -1708,7 +1708,7 @@ public:
     handleRetAttrs(attrs_fndef.getAttributes(ret), attrs);
     handleFnAttrs(attrs_fndef.getAttributes(fnidx), attrs);
     attrs.mem.setFullAccess();
-    #ifndef LLVM_14
+    #if LLVM_VERSION_MAJOR > 14
     if (!decl_only)
       attrs.mem &= handleMemAttrs(i.getMemoryEffects());
     if (fn)
@@ -1789,7 +1789,7 @@ public:
     const auto &fnidx = llvm::AttributeList::FunctionIndex;
     handleRetAttrs(attrlist.getAttributes(ridx), attrs);
     handleFnAttrs(attrlist.getAttributes(fnidx), attrs);
-    #ifdef LLVM_14
+    #if LLVM_VERSION_MAJOR <= 14
     attrs.mem.setFullAccess();
     #else
     attrs.mem = handleMemAttrs(f.getMemoryEffects());

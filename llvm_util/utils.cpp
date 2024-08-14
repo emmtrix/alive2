@@ -20,8 +20,6 @@
 #include <utility>
 #include <vector>
 
-#define LLVM_14
-
 using namespace IR;
 using namespace std;
 using llvm::cast, llvm::dyn_cast, llvm::isa;
@@ -166,7 +164,7 @@ Type* llvm_type2alive(const llvm::Type *ty) {
         auto ofs = layout->getElementOffset(i);
         auto sz = DL->getTypeStoreSize(e);
 
-#ifndef LLVM_14
+#if LLVM_VERSION_MAJOR > 14
         // TODO: support vscale
         if (ofs.isScalable() || sz.isScalable())
           return nullptr;
@@ -181,7 +179,7 @@ Type* llvm_type2alive(const llvm::Type *ty) {
         auto ofs_next = i + 1 == strty->getNumElements() ?
                 DL->getTypeAllocSize(const_cast<llvm::StructType *>(strty)) :
                 layout->getElementOffset(i + 1);
-#ifndef LLVM_14
+#if LLVM_VERSION_MAJOR > 14
         // TODO: support vscale
         if (ofs_next.isScalable())
           return nullptr;
@@ -362,7 +360,7 @@ Value* get_operand(llvm::Value *v,
   }
 
   if (auto fn = dyn_cast<llvm::Function>(v)) {
-    #ifdef LLVM_14
+    #if LLVM_VERSION_MAJOR <= 14
     uint64_t align = fn->getAlign().getValueOr(llvm::Align(8)).value();
     #else
     uint64_t align = fn->getAlign().value_or(llvm::Align(8)).value();

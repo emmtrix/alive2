@@ -24,7 +24,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
-#ifdef LLVM_14
+#if LLVM_VERSION_MAJOR <= 14
 #include "llvm/Support/TargetParser.h"
 #else
 #include "llvm/TargetParser/Triple.h"

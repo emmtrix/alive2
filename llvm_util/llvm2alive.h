@@ -9,8 +9,6 @@
 #include <string>
 #include <vector>
 
-#define LLVM_14
-
 namespace llvm {
 class DataLayout;
 class Function;
