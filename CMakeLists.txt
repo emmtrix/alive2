@@ -169,7 +169,7 @@ endif()
 
 
 if (BUILD_LLVM_UTILS OR BUILD_TV)
-  find_package(LLVM 14 REQUIRED CONFIG)
+  find_package(LLVM REQUIRED CONFIG)
 
   message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
   message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
@@ -200,7 +200,9 @@ if (BUILD_LLVM_UTILS OR BUILD_TV)
   add_library(llvm_util STATIC ${LLVM_UTIL_SRCS})
   set(ALIVE_LIBS_LLVM llvm_util ${ALIVE_LIBS})
 
-  set(LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS} TargetParser)
+  if (LLVM_VERSION_MAJOR GREATER 14)
+    set(LLVM_LINK_COMPONENTS ${LLVM_LINK_COMPONENTS} TargetParser)
+  endif()
 
   add_llvm_executable(alive-tv
     "tools/alive-tv.cpp"
