@@ -288,3 +288,19 @@ add_custom_target("check"
 if (BUILD_TV)
   add_dependencies("check" "alive-tv" "quick-fuzz" "tv")
 endif()
+
+if (Z3_DLL)
+  if (NOT MSVC)
+    message(FATAL_ERROR "Copying DLLs is only supported when using MSVC")
+  endif()
+
+  message(STATUS "Copy Z3 Shared Library ${Z3_DLL} to ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/libz3.dll")
+
+  add_custom_command(
+    TARGET alive-tv
+    POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${Z3_DLL}" "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/libz3.dll"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    VERBATIM
+  )
+endif()
