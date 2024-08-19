@@ -35,15 +35,27 @@ using llvm::cast, llvm::dyn_cast, llvm::isa;
 using llvm::LLVMContext;
 
 namespace {
+#if LLVM_VERSION_MAJOR <= 14
+template <class T>
+bool has_value(const llvm::Optional<T> &opt) {
+  return opt.hasValue();
+}
+
+bool starts_with(const llvm::StringRef& string,
+                 const llvm::StringRef& prefix) {
+  return string.startswith(prefix);
+}
+#else
 template <class T>
 bool has_value(const optional<T> &opt) {
   return opt.has_value();
 }
 
-template <class T>
-bool has_value(const llvm::Optional<T> &opt) {
-  return opt.hasValue();
+bool starts_with(const llvm::StringRef& string,
+                 const llvm::StringRef& prefix) {
+  return string.starts_with(prefix);
 }
+#endif
 
 FpRoundingMode parse_rounding(llvm::Instruction &i) {
   auto *fp = dyn_cast<llvm::ConstrainedFPIntrinsic>(&i);
@@ -431,7 +443,7 @@ public:
       if (!fn) {
         if (!(fnptr = get_operand(i.getCalledOperand())))
           return error(i);
-      } else if (fn->getName().startswith("__llvm_profile_"))
+      } else if (starts_with(fn->getName(), "__llvm_profile_"))
         return NOP(i);
 
       call = make_unique<FnCall>(*ty, value_name(i),
@@ -1761,7 +1773,7 @@ public:
   }
   
   #if LLVM_VERSION_MAJOR > 14
-  MemoryAccess handleMemAttrs(const llvm::MemoryEffects &e) {
+  static MemoryAccess handleMemAttrs(const llvm::MemoryEffects &e) {
     MemoryAccess attrs;
     attrs.setNoAccess();
 
@@ -1777,9 +1789,9 @@ public:
 
     for (auto &[ef, ty] : tys) {
       auto modref = e.getModRef(ef);
-      if (llvm::isModSet(modref))
+      if (isModSet(modref))
         attrs.setCanAlsoWrite(ty);
-      if (llvm::isRefSet(modref))
+      if (isRefSet(modref))
         attrs.setCanAlsoRead(ty);
     }
     return attrs;

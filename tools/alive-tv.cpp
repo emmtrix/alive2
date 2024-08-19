@@ -148,8 +148,13 @@ and "tgt5" will unused.
       if (F1.isDeclaration())
         continue;
       auto SrcFName = F1.getName();
+      #if LLVM_VERSION_MAJOR <= 14
       if (!SrcFName.startswith(opt_src_fn))
         continue;
+      #else
+      if (!SrcFName.starts_with(opt_src_fn))
+        continue;
+      #endif
 
       // Check src{+d}/tgt{+d} variant
       if (std::find_if(SrcFName.begin() + opt_src_fn.length(), SrcFName.end(),
