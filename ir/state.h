@@ -260,6 +260,8 @@ public:
 
   bool isAsmMode() const;
 
+  smt::expr getPath(BasicBlock &bb) const;
+
   // only used by alive-exec to support execution of the same BB multiple times
   void cleanup(const Value &val);
   void cleanupPredecessorData();
@@ -334,7 +336,6 @@ public:
   const auto& getNondetVars() const { return nondet_vars; }
   const auto& getFnQuantVars() const { return fn_call_qvars; }
 
-  void saveReturnedInput();
   const std::optional<StateValue>& getReturnedInput() const {
     return returned_input;
   }

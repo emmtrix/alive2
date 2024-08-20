@@ -469,16 +469,19 @@ expr FloatType::fromFloat(State &s, const expr &fp, const Type &from_type0,
 
   auto add_maybe_quiet = [&](const expr &e) {
     // account for fpext/fptruc
-    expr fraction = e.trunc(min(from_type->fractionBits(), fraction_bits));
-    if (fraction.bits() < fraction_bits)
+    auto orig_bw = from_type->fractionBits();
+    expr fraction = e.trunc(orig_bw);
+    expr truncated_is_nan = true;
+
+    if (orig_bw > fraction_bits) {
+      fraction = fraction.extract(orig_bw-1, orig_bw - fraction_bits);
+      truncated_is_nan = fraction != 0;
+    } else if (orig_bw < fraction_bits) {
       fraction = fraction.concat_zeros(fraction_bits - fraction.bits());
+    }
     assert(!fraction.isValid() || fraction.bits() == fraction_bits);
 
-    expr truncated_is_nan = true;
-    if (from_type->fractionBits() > fraction_bits)
-      truncated_is_nan = fraction != 0;
-
-    expr qnan = fraction.extract(fraction_bits - 1, fraction_bits - 1);
+    expr qnan = fraction.sign();
     expr quieted = var.extract(0, 0);
     qnan = expr::mkIf(truncated_is_nan, qnan | quieted, expr::mkUInt(1, 1));
     exprs.add(qnan.concat(fraction.trunc(fraction_bits - 1)),
@@ -740,7 +743,7 @@ PtrType::mkUndefInput(State &s, const ParamAttrs &attrs) const {
 }
 
 void PtrType::printVal(ostream &os, const State &s, const expr &e) const {
-  os << Pointer(s.getMemory(), e);
+  os << Pointer(const_cast<State&>(s).returnMemory(), e);
 }
 
 void PtrType::print(ostream &os) const {

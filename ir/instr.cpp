@@ -72,7 +72,8 @@ struct LoopLikeFunctionApproximator {
     prefix.add(ub_i);
 
     // Keep going if the function is being applied to a constant input
-    is_last &= !continue_i.isConst();
+    if (i < 512)
+      is_last &= !continue_i.isConst();
 
     if (is_last)
       s.addPre(prefix().implies(!continue_i));
@@ -106,6 +107,9 @@ expr Instr::getTypeConstraints() const {
   return {};
 }
 
+bool Instr::isTerminator() const {
+  return false;
+}
 
 BinOp::BinOp(Type &type, string &&name, Value &lhs, Value &rhs, Op op,
              unsigned flags)
@@ -949,7 +953,16 @@ vector<Value*> UnaryOp::operands() const {
 }
 
 bool UnaryOp::propagatesPoison() const {
-  return true;
+  switch (op) {
+  case Copy:
+  case BitReverse:
+  case BSwap:
+  case Ctpop:
+  case FFS:
+    return true;
+  case IsConstant: return false;
+  }
+  UNREACHABLE();
 }
 
 bool UnaryOp::hasSideEffects() const {
@@ -2132,9 +2145,9 @@ unique_ptr<Instr> InsertValue::dup(Function &f, const string &suffix) const {
 DEFINE_AS_RETZERO(FnCall, getMaxGEPOffset);
 
 FnCall::FnCall(Type &type, string &&name, string &&fnName, FnAttrs &&attrs,
-               Value *fnptr)
+               Value *fnptr, unsigned var_arg_idx)
   : MemInstr(type, std::move(name)), fnName(std::move(fnName)), fnptr(fnptr),
-    attrs(std::move(attrs)) {
+    attrs(std::move(attrs)), var_arg_idx(var_arg_idx) {
   if (config::disallow_ub_exploitation)
     this->attrs.set(FnAttrs::NoUndef);
   assert(!fnptr || this->fnName.empty());
@@ -2195,12 +2208,21 @@ MemInstr::ByteAccessInfo FnCall::getByteAccessInfo() const {
   if (attrs.has(AllocKind::Uninitialized) || attrs.has(AllocKind::Free))
     return {};
 
+  bool has_ptr_args = any_of(args.begin(), args.end(),
+    [](const auto &pair) {
+      auto &[val, attrs] = pair;
+      return hasPtr(val->getType()) &&
+             !attrs.has(ParamAttrs::ByVal) &&
+             !attrs.has(ParamAttrs::NoCapture);
+    });
+
   // calloc style
   if (attrs.has(AllocKind::Zeroed)) {
     auto info = ByteAccessInfo::intOnly(1);
     auto [alloc, align] = getMaxAllocSize();
     if (alloc)
       info.byteSize = gcd(alloc, align);
+    info.observesAddresses = has_ptr_args;
     return info;
   }
 
@@ -2239,11 +2261,10 @@ MemInstr::ByteAccessInfo FnCall::getByteAccessInfo() const {
   }
 #undef UPDATE
 
-  // No dereferenceable attribute
-  if (bytesize == 0)
-    return {};
-
-  return ByteAccessInfo::anyType(bytesize);
+  ByteAccessInfo info;
+  info.byteSize = bytesize;
+  info.observesAddresses = has_ptr_args;
+  return info;
 }
 
 
@@ -2278,7 +2299,11 @@ void FnCall::print(ostream &os) const {
      << (fnptr ? fnptr->getName() : fnName) << '(';
 
   bool first = true;
+  unsigned idx = 0;
   for (auto &[arg, attrs] : args) {
+    if (idx++ == var_arg_idx)
+      os << "...";
+
     if (!first)
       os << ", ";
 
@@ -2402,23 +2427,30 @@ StateValue FnCall::toSMT(State &s) const {
   auto ptr = fnptr;
   // This is a direct call, but check if there are indirect calls elsewhere
   // to this function. If so, call it indirectly to match the other calls.
-  if (!ptr)
-    ptr = s.getFn().getGlobalVar(string_view(fnName).substr(1));
+  if (!ptr && has_indirect_fncalls)
+    ptr = s.getFn().getGlobalVar(fnName);
 
   ostringstream fnName_mangled;
   if (ptr) {
     fnName_mangled << "#indirect_call";
 
     Pointer p(s.getMemory(), s.getAndAddPoisonUB(*ptr, true).value);
-    inputs.emplace_back(p.reprWithoutAttrs(), true);
+    auto bid = p.getShortBid();
+    inputs.emplace_back(expr(bid), true);
     s.addUB(p.isDereferenceable(1, 1, false));
 
     Function::FnDecl decl;
     decl.output = &getType();
+    unsigned idx = 0;
     for (auto &[arg, params] : args) {
+      if (idx++ == var_arg_idx)
+        break;
       decl.inputs.emplace_back(&arg->getType(), params);
     }
-    s.addUB(expr::mkUF("#fndeclty", { inputs[0].value }, expr::mkUInt(0, 32)) ==
+    decl.is_varargs = var_arg_idx != -1u;
+    s.addUB(!p.isLocal());
+    s.addUB(p.getOffset() == 0);
+    s.addUB(expr::mkUF("#fndeclty", { std::move(bid) }, expr::mkUInt(0, 32)) ==
             (indirect_hash = decl.hash()));
   } else {
     fnName_mangled << fnName;
@@ -2469,7 +2501,9 @@ StateValue FnCall::toSMT(State &s) const {
     UNREACHABLE();
   };
 
-  if (attrs.has(AllocKind::Alloc) || attrs.has(AllocKind::Realloc)) {
+  if (attrs.has(AllocKind::Alloc) ||
+      attrs.has(AllocKind::Realloc) ||
+      attrs.has(FnAttrs::AllocSize)) {
     auto [size, np_size] = attrs.computeAllocSize(s, args);
     expr nonnull = attrs.isNonNull() ? expr(true)
                                      : expr::mkBoolVar("malloc_never_fails");
@@ -2559,7 +2593,7 @@ expr FnCall::getTypeConstraints(const Function &f) const {
 
 unique_ptr<Instr> FnCall::dup(Function &f, const string &suffix) const {
   auto r = make_unique<FnCall>(getType(), getName() + suffix, string(fnName),
-                               FnAttrs(attrs), fnptr);
+                               FnAttrs(attrs), fnptr, var_arg_idx);
   r->args = args;
   r->approx = approx;
   return r;
@@ -2668,8 +2702,12 @@ StateValue ICmp::toSMT(State &s) const {
 
   if (isPtrCmp()) {
     fn = [this, &s, fn](const expr &av, const expr &bv, Cond cond) {
-      Pointer lhs(s.getMemory(), av);
-      Pointer rhs(s.getMemory(), bv);
+      auto &m = s.getMemory();
+      Pointer lhs(m, av);
+      Pointer rhs(m, bv);
+      m.observesAddr(lhs);
+      m.observesAddr(rhs);
+
       switch (pcmode) {
       case INTEGRAL:
         return fn(lhs.getAddress(), rhs.getAddress(), cond);
@@ -3013,6 +3051,10 @@ JumpInstr::target_iterator JumpInstr::it_helper::end() const {
   return { instr, idx };
 }
 
+bool JumpInstr::isTerminator() const {
+  return true;
+}
+
 
 void Branch::replaceTargetWith(const BasicBlock *from, const BasicBlock *to) {
   if (dst_true == from)
@@ -3214,6 +3256,9 @@ unique_ptr<Instr> Return::dup(Function &f, const string &suffix) const {
   return make_unique<Return>(getType(), *val);
 }
 
+bool Return::isTerminator() const {
+  return true;
+}
 
 Assume::Assume(Value &cond, Kind kind)
     : Instr(Type::voidTy, "assume"), args({&cond}), kind(kind) {
@@ -3246,6 +3291,17 @@ bool Assume::propagatesPoison() const {
 }
 
 bool Assume::hasSideEffects() const {
+  switch (kind) {
+  // assume(true) is NOP
+  case AndNonPoison:
+  case WellDefined:
+    if (auto *c = dynamic_cast<IntConst*>(args[0]))
+      if (auto n = c->getInt())
+        return *n != 1;
+    break;
+  default:
+    break;
+  }
   return true;
 }
 
@@ -3690,7 +3746,7 @@ uint64_t GEP::getMaxGEPOffset() const {
       return UINT64_MAX;
 
     if (auto n = getInt(*v)) {
-      off = add_saturate(off, abs((int64_t)mul * *n));
+      off = add_saturate(off, (int64_t)mul * *n);
       continue;
     }
 
