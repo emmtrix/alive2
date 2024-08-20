@@ -212,7 +212,8 @@ class Memory {
 
   void store(const Pointer &ptr,
              const std::vector<std::pair<unsigned, smt::expr>> &data,
-             const std::set<smt::expr> &undef, uint64_t align);
+             const std::set<smt::expr> &undef, uint64_t align,
+             const smt::expr &enable = true);
   void store(const StateValue &val, const Type &type, unsigned offset,
              std::vector<std::pair<unsigned, smt::expr>> &data);
 
@@ -329,7 +330,8 @@ public:
 
   static unsigned getStoreByteSize(const Type &ty);
   void store(const smt::expr &ptr, const StateValue &val, const Type &type,
-             uint64_t align, const std::set<smt::expr> &undef_vars);
+             uint64_t align, const std::set<smt::expr> &undef_vars,
+             const smt::expr &enable = true);
   std::pair<StateValue, std::pair<smt::AndExpr, smt::expr>>
     load(const smt::expr &ptr, const Type &type, uint64_t align);
 
