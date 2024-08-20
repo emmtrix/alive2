@@ -1225,8 +1225,9 @@ void Memory::store(const Pointer &ptr,
     uint64_t blk_size;
     bool full_write = ptr.blockSize().isUInt(blk_size) && blk_size == bytes;
 
+    expr offset = ptr.getShortOffset();
     for (auto &[idx, val] : data) {
-      expr off = offset + expr::mkUInt(idx >> Pointer::zeroBitsShortOffset(), off_bits);
+      expr off = offset + expr::mkUInt(idx >> Pointer::zeroBitsShortOffset(), offset);
       blk.store_offsets.insert(off);
     }
 
@@ -1252,8 +1253,6 @@ void Memory::store(const Pointer &ptr,
     } else {
       blk.type |= stored_ty;
     }
-
-    expr offset = ptr.getShortOffset();
 
     for (auto &[idx, val] : data) {
       if (full_write && val.eq(data[0].second))
@@ -2509,6 +2508,44 @@ expr Memory::int2ptr(const expr &val0) const {
   return expr::mkIf(val0 == 0, null, fn);
 }
 
+static expr load_propagate(const expr &array,
+                           const expr &index,
+                           unsigned depth = 10) {
+  if (array.isBV()) {
+    return array;
+  }
+
+  if (depth == 0) {
+    return array.load(index);
+  }
+
+  expr cond, then, els;
+  expr arr, next_arr, idx, val;
+  if (array.isIf(cond, then, els)) {
+    return expr::mkIf(cond,
+                      load_propagate(then, index, depth - 1),
+                      load_propagate(els, index, depth - 1));
+  } else if (array.isStore(next_arr, idx, val)) {
+    arr = array;
+    while (arr.isStore(next_arr, idx, val)) {
+      if ((idx == index).isTrue()) {
+        return val;
+      }
+
+      auto res = check_expr(idx == index);
+      if (!res.isUnsat()) {
+        break;
+      }
+
+      arr = next_arr;
+    }
+
+    return load_propagate(arr, index, depth - 1);
+  } else {
+    return array.load(index);
+  }
+}
+
 expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
                              const expr &offset, set<expr> &undef) const {
   assert(!local);
@@ -2533,8 +2570,8 @@ expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
     return false;
   }
 
-  Byte val  = raw_load(false, bid, offset);
-  Byte val2 = other.raw_load(false, bid, offset);
+  Byte val(*this, load_propagate(mem1.val, offset));
+  Byte val2(other, load_propagate(mem2, offset));
 
   if (val.eq(val2))
     return true;
