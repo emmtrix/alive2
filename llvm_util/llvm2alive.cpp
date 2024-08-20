@@ -315,13 +315,13 @@ public:
           if (NNI->hasNonNeg())
             flags |= ConversionOp::NNEG;
         }
-        #endif
         if (const auto *TI = dyn_cast<llvm::TruncInst>(&i)) {
           if (TI->hasNoUnsignedWrap())
             flags |= ConversionOp::NUW;
           if (TI->hasNoSignedWrap())
             flags |= ConversionOp::NSW;
         }
+        #endif
         return make_unique<ConversionOp>(*ty, value_name(i), *val, op, flags);
       }
     }
