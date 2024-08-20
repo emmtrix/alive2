@@ -1320,9 +1320,7 @@ public:
     case llvm::Intrinsic::instrprof_increment_step:
     case llvm::Intrinsic::instrprof_value_profile:
     case llvm::Intrinsic::prefetch:
-    #if LLVM_VERSION_MAJOR <= 14
     case llvm::Intrinsic::experimental_noalias_scope_decl:
-    #endif
       return NOP(i);
 
     default:
@@ -1490,12 +1488,10 @@ public:
       #endif
       case LLVMContext::MD_prof:
       case LLVMContext::MD_unpredictable:
-      #if LLVM_VERSION_MAJOR <= 14 // TODO: Remove?
       case LLVMContext::MD_noalias:
       case LLVMContext::MD_tbaa:
       case LLVMContext::MD_tbaa_struct:
       case LLVMContext::MD_alias_scope:
-      #endif
         break;
 
       default:
