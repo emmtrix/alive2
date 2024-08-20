@@ -1226,6 +1226,12 @@ void Memory::store(const Pointer &ptr,
     uint64_t blk_size;
     bool full_write = ptr.blockSize().isUInt(blk_size) && blk_size == bytes;
 
+    expr offset = ptr.getShortOffset();
+    for (auto &[idx, val] : data) {
+      expr off = offset + expr::mkUInt(idx >> Pointer::zeroBitsShortOffset(), offset);
+      blk.store_offsets.insert(off);
+    }
+
     // optimization: if fully rewriting the block, don't bother with the old
     // contents. Pick a value as the default one.
     // If we are initializing const globals, the size may be larger than the
@@ -1248,8 +1254,6 @@ void Memory::store(const Pointer &ptr,
     } else {
       blk.type |= stored_ty;
     }
-
-    expr offset = ptr.getShortOffset();
 
     for (auto &[idx, val] : data) {
       if (full_write && val.eq(data[0].second))
@@ -2506,6 +2510,44 @@ expr Memory::int2ptr(const expr &val0) const {
   return expr::mkIf(val0 == 0, null, fn);
 }
 
+static expr load_propagate(const expr &array,
+                           const expr &index,
+                           unsigned depth = 10) {
+  if (array.isBV()) {
+    return array;
+  }
+
+  if (depth == 0) {
+    return array.load(index);
+  }
+
+  expr cond, then, els;
+  expr arr, next_arr, idx, val;
+  if (array.isIf(cond, then, els)) {
+    return expr::mkIf(cond,
+                      load_propagate(then, index, depth - 1),
+                      load_propagate(els, index, depth - 1));
+  } else if (array.isStore(next_arr, idx, val)) {
+    arr = array;
+    while (arr.isStore(next_arr, idx, val)) {
+      if ((idx == index).isTrue()) {
+        return val;
+      }
+
+      auto res = check_expr(idx == index);
+      if (!res.isUnsat()) {
+        break;
+      }
+
+      arr = next_arr;
+    }
+
+    return load_propagate(arr, index, depth - 1);
+  } else {
+    return array.load(index);
+  }
+}
+
 expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
                              const expr &offset, set<expr> &undef) const {
   assert(!local);
@@ -2530,8 +2572,8 @@ expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
     return false;
   }
 
-  Byte val  = raw_load(false, bid, offset);
-  Byte val2 = other.raw_load(false, bid, offset);
+  Byte val(*this, load_propagate(mem1.val, offset));
+  Byte val2(other, load_propagate(mem2, offset));
 
   if (val.eq(val2))
     return true;
@@ -2549,25 +2591,20 @@ expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
 
 expr Memory::blockRefined(const Pointer &src, const Pointer &tgt, unsigned bid,
                           set<expr> &undef) const {
-  unsigned bytes_per_byte = bits_byte / 8;
-
+  
   expr blk_size = src.blockSize();
   expr ptr_offset = src.getShortOffset();
-  expr val_refines;
+  
+  set<expr> store_offsets = src.getMemory().non_local_block_val[bid].store_offsets;
+  set<expr> tgt_store_offsets = tgt.getMemory().non_local_block_val[bid].store_offsets;
+  store_offsets.insert(tgt_store_offsets.begin(), tgt_store_offsets.end());
 
-  uint64_t bytes;
-  if (blk_size.isUInt(bytes) && (bytes / bytes_per_byte) <= 8) {
-    val_refines = true;
-    for (unsigned off = 0; off < (bytes / bytes_per_byte); ++off) {
-      expr off_expr = expr::mkUInt(off, Pointer::bitsShortOffset());
-      val_refines
-        &= (ptr_offset == off_expr).implies(
-             blockValRefined(tgt.getMemory(), bid, false, off_expr, undef));
-    }
-  } else {
+  expr val_refines = true;
+  for (const expr &offset : store_offsets) {
+    std::cout << offset << std::endl;
     val_refines
-      = src.getOffsetSizet().ult(src.blockSizeOffsetT()).implies(
-          blockValRefined(tgt.getMemory(), bid, false, ptr_offset, undef));
+      &= (ptr_offset == offset).implies(
+            blockValRefined(tgt.getMemory(), bid, false, offset, undef));
   }
 
   expr aligned(true);
@@ -2746,6 +2783,7 @@ Memory Memory::mkIf(const expr &cond, Memory &&then, Memory &&els) {
     blk.val     = mk_block_if(cond, blk.val, other.val);
     blk.type   |= other.type;
     blk.undef.insert(other.undef.begin(), other.undef.end());
+    blk.store_offsets.insert(other.store_offsets.begin(), other.store_offsets.end());
   }
   for (unsigned bid = 0, end = ret.numLocals(); bid < end; ++bid) {
     auto &blk   = ret.local_block_val[bid];
@@ -2753,6 +2791,7 @@ Memory Memory::mkIf(const expr &cond, Memory &&then, Memory &&els) {
     blk.val     = mk_block_if(cond, blk.val, other.val);
     blk.type   |= other.type;
     blk.undef.insert(other.undef.begin(), other.undef.end());
+    blk.store_offsets.insert(other.store_offsets.begin(), other.store_offsets.end());
   }
   ret.non_local_block_liveness = expr::mkIf(cond, then.non_local_block_liveness,
                                             els.non_local_block_liveness);
