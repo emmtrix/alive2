@@ -4040,7 +4040,7 @@ uint64_t LoadStrided::getMaxAccessSize() const {
 }
 
 MemInstr::ByteAccessInfo LoadStrided::getByteAccessInfo() const {
-  return ByteAccessInfo::get(getType(), false, 1);
+  return ByteAccessInfo::get(getType(), false, align);
 }
 
 vector<Value*> LoadStrided::operands() const {
@@ -4058,7 +4058,8 @@ void LoadStrided::rauw(const Value &what, Value &with) {
 
 void LoadStrided::print(ostream &os) const {
   os << getName() << " = load.strided " << getType() << ", " << *ptr
-     << ", stride " << *stride;
+     << ", stride " << *stride
+     << ", align " << align;
 }
 
 StateValue LoadStrided::toSMT(State &s) const {
@@ -4073,7 +4074,7 @@ StateValue LoadStrided::toSMT(State &s) const {
     Pointer pointer(s.getMemory(), base_pointer);
     pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
 
-    auto [value, ub] = s.getMemory().load(pointer(), element_type, 1);
+    auto [value, ub] = s.getMemory().load(pointer(), element_type, align);
     s.addUB(std::move(ub));
     values.emplace_back(value);
   }
@@ -4089,7 +4090,7 @@ expr LoadStrided::getTypeConstraints(const Function &f) const {
 }
 
 unique_ptr<Instr> LoadStrided::dup(Function &f, const string &suffix) const {
-  return make_unique<LoadStrided>(getType(), getName() + suffix, *ptr, *stride);
+  return make_unique<LoadStrided>(getType(), getName() + suffix, *ptr, *stride, align);
 }
 
 DEFINE_AS_RETZEROALIGN(LoadIndexed, getMaxAllocSize);
@@ -4100,7 +4101,7 @@ uint64_t LoadIndexed::getMaxAccessSize() const {
 }
 
 MemInstr::ByteAccessInfo LoadIndexed::getByteAccessInfo() const {
-  return ByteAccessInfo::get(getType(), false, 1);
+  return ByteAccessInfo::get(getType(), false, align);
 }
 
 vector<Value*> LoadIndexed::operands() const {
@@ -4118,7 +4119,8 @@ void LoadIndexed::rauw(const Value &what, Value &with) {
 
 void LoadIndexed::print(ostream &os) const {
   os << getName() << " = load.indexed " << getType() << ", " << *ptr
-     << ", indices " << *indices;
+     << ", indices " << *indices
+     << ", align " << align;
 }
 
 StateValue LoadIndexed::toSMT(State &s) const {
@@ -4138,7 +4140,7 @@ StateValue LoadIndexed::toSMT(State &s) const {
     Pointer pointer(s.getMemory(), base_pointer);
     pointer += index.sextOrTrunc(bits_for_offset);
 
-    auto [value, ub] = s.getMemory().load(pointer(), element_type, 1);
+    auto [value, ub] = s.getMemory().load(pointer(), element_type, align);
     s.addUB(std::move(ub));
     values.emplace_back(value);
   }
@@ -4154,7 +4156,7 @@ expr LoadIndexed::getTypeConstraints(const Function &f) const {
 }
 
 unique_ptr<Instr> LoadIndexed::dup(Function &f, const string &suffix) const {
-  return make_unique<LoadIndexed>(getType(), getName() + suffix, *ptr, *indices);
+  return make_unique<LoadIndexed>(getType(), getName() + suffix, *ptr, *indices, align);
 }
 
 
@@ -4219,7 +4221,7 @@ uint64_t StoreStrided::getMaxAccessSize() const {
 }
 
 MemInstr::ByteAccessInfo StoreStrided::getByteAccessInfo() const {
-  return ByteAccessInfo::get(val->getType(), true, 1);
+  return ByteAccessInfo::get(val->getType(), true, align);
 }
 
 vector<Value*> StoreStrided::operands() const {
@@ -4238,7 +4240,10 @@ void StoreStrided::rauw(const Value &what, Value &with) {
 }
 
 void StoreStrided::print(ostream &os) const {
-  os << "store.strided " << *val << ", " << *ptr << ", stride " << *stride << ", enable " << *enable;
+  os << "store.strided " << *val << ", " << *ptr
+     << ", stride " << *stride
+     << ", enable " << *enable
+     << ", align " << align;
 }
 
 StateValue StoreStrided::toSMT(State &s) const {
@@ -4258,7 +4263,7 @@ StateValue StoreStrided::toSMT(State &s) const {
     pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
 
     auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
-    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars(), enable_store);
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), align, s.getUndefVars(), enable_store);
   }
 
   return {};
@@ -4271,7 +4276,7 @@ expr StoreStrided::getTypeConstraints(const Function &f) const {
 }
 
 unique_ptr<Instr> StoreStrided::dup(Function &f, const string &suffix) const {
-  return make_unique<StoreStrided>(*ptr, *val, *stride, *enable);
+  return make_unique<StoreStrided>(*ptr, *val, *stride, *enable, align);
 }
 
 
@@ -4283,7 +4288,7 @@ uint64_t StoreIndexed::getMaxAccessSize() const {
 }
 
 MemInstr::ByteAccessInfo StoreIndexed::getByteAccessInfo() const {
-  return ByteAccessInfo::get(val->getType(), true, 1);
+  return ByteAccessInfo::get(val->getType(), true, align);
 }
 
 vector<Value*> StoreIndexed::operands() const {
@@ -4302,7 +4307,10 @@ void StoreIndexed::rauw(const Value &what, Value &with) {
 }
 
 void StoreIndexed::print(ostream &os) const {
-  os << "store.indexed " << *val << ", " << *ptr << ", indices " << *indices << ", enable " << *enable;
+  os << "store.indexed " << *val << ", " << *ptr
+     << ", indices " << *indices
+     << ", enable " << *enable
+     << ", align " << align;
 }
 
 StateValue StoreIndexed::toSMT(State &s) const {
@@ -4326,7 +4334,7 @@ StateValue StoreIndexed::toSMT(State &s) const {
     pointer += index.sextOrTrunc(bits_for_offset);
 
     auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
-    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), 1, s.getUndefVars(), enable_store);
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), align, s.getUndefVars(), enable_store);
   }
 
   return {};
@@ -4339,7 +4347,7 @@ expr StoreIndexed::getTypeConstraints(const Function &f) const {
 }
 
 unique_ptr<Instr> StoreIndexed::dup(Function &f, const string &suffix) const {
-  return make_unique<StoreIndexed>(*ptr, *val, *indices, *enable);
+  return make_unique<StoreIndexed>(*ptr, *val, *indices, *enable, align);
 }
 
 
