@@ -408,28 +408,45 @@ public:
         };
       
         string base_name = demangled_to_string(demangler.getFunctionBaseName(nullptr, 0));
-        if (base_name == "__emx_simd_load_strided") {
-          return make_unique<LoadStrided>(
-            *ty, value_name(i),
-            *args.at(0),
-            *args.at(1));
-        } else if (base_name == "__emx_simd_store_strided") {
-          return make_unique<StoreStrided>(
-            *args.at(0),
-            *args.at(1),
-            *args.at(2),
-            *args.at(3));
-        } else if (base_name == "__emx_simd_load_indexed") {
-          return make_unique<LoadIndexed>(
-            *ty, value_name(i),
-            *args.at(0),
-            *args.at(1));
-        } else if (base_name == "__emx_simd_store_indexed") {
-          return make_unique<StoreIndexed>(
-            *args.at(0),
-            *args.at(1),
-            *args.at(2),
-            *args.at(3));
+        bool is_load_strided = base_name == "__emx_simd_load_strided";
+        bool is_load_indexed = base_name == "__emx_simd_load_indexed";
+        bool is_store_strided = base_name == "__emx_simd_store_strided";
+        bool is_store_indexed = base_name == "__emx_simd_store_indexed";
+        if (is_load_strided || is_load_indexed || is_store_strided || is_store_indexed) {
+          llvm::Type* vector_type = i.getType();
+          if (is_store_strided || is_store_indexed) {
+            vector_type = i.getArgOperand(1)->getType();
+          }
+          llvm::Type* element_type = cast<llvm::VectorType>(vector_type)->getElementType();
+          uint64_t align = DL().getABITypeAlign(element_type).value();
+
+          if (is_load_strided) {
+            return make_unique<LoadStrided>(
+              *ty, value_name(i),
+              *args.at(0),
+              *args.at(1),
+              align);
+          } else if (is_store_strided) {
+            return make_unique<StoreStrided>(
+              *args.at(0),
+              *args.at(1),
+              *args.at(2),
+              *args.at(3),
+              align);
+          } else if (is_load_indexed) {
+            return make_unique<LoadIndexed>(
+              *ty, value_name(i),
+              *args.at(0),
+              *args.at(1),
+              align);
+          } else if (is_store_indexed) {
+            return make_unique<StoreIndexed>(
+              *args.at(0),
+              *args.at(1),
+              *args.at(2),
+              *args.at(3),
+              align);
+          }
         } else if (base_name == "__emx_simd_cond") {
           return make_unique<Select>(
             *ty, value_name(i),

@@ -908,9 +908,10 @@ public:
 class LoadStrided final : public MemInstr {
   Value *ptr;
   Value *stride;
+  uint64_t align;
 public:
-  LoadStrided(Type &type, std::string &&name, Value &ptr, Value &stride)
-    : MemInstr(type, std::move(name)), ptr(&ptr), stride(&stride) {}
+  LoadStrided(Type &type, std::string &&name, Value &ptr, Value &stride, uint64_t align)
+    : MemInstr(type, std::move(name)), ptr(&ptr), stride(&stride), align(align) {}
 
   Value& getPtr() const { return *ptr; }
   Value& getStride() const { return *stride; }
@@ -933,9 +934,10 @@ public:
 class LoadIndexed final : public MemInstr {
   Value *ptr;
   Value *indices;
+  uint64_t align;
 public:
-  LoadIndexed(Type &type, std::string &&name, Value &ptr, Value &indices)
-    : MemInstr(type, std::move(name)), ptr(&ptr), indices(&indices) {}
+  LoadIndexed(Type &type, std::string &&name, Value &ptr, Value &indices, uint64_t align)
+    : MemInstr(type, std::move(name)), ptr(&ptr), indices(&indices), align(align) {}
 
   Value& getPtr() const { return *ptr; }
   Value& getIndices() const { return *indices; }
@@ -986,9 +988,10 @@ public:
 
 class StoreStrided final : public MemInstr {
   Value *ptr, *val, *stride, *enable;
+  uint64_t align;
 public:
-  StoreStrided(Value &ptr, Value &val, Value &stride, Value &enable)
-    : MemInstr(Type::voidTy, "store.strided"), ptr(&ptr), val(&val), stride(&stride), enable(&enable) {}
+  StoreStrided(Value &ptr, Value &val, Value &stride, Value &enable, uint64_t align)
+    : MemInstr(Type::voidTy, "store.strided"), ptr(&ptr), val(&val), stride(&stride), enable(&enable), align(align) {}
 
   Value& getValue() const { return *val; }
   Value& getPtr() const { return *ptr; }
@@ -1014,9 +1017,10 @@ public:
 
 class StoreIndexed final : public MemInstr {
   Value *ptr, *val, *indices, *enable;
+  uint64_t align;
 public:
-  StoreIndexed(Value &ptr, Value &val, Value &indices, Value &enable)
-    : MemInstr(Type::voidTy, "store.indexed"), ptr(&ptr), val(&val), indices(&indices), enable(&enable) {}
+  StoreIndexed(Value &ptr, Value &val, Value &indices, Value &enable, uint64_t align)
+    : MemInstr(Type::voidTy, "store.indexed"), ptr(&ptr), val(&val), indices(&indices), enable(&enable), align(align) {}
 
   Value& getValue() const { return *val; }
   Value& getPtr() const { return *ptr; }
