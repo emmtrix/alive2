@@ -1333,7 +1333,9 @@ public:
     case llvm::Intrinsic::dbg_label:
     case llvm::Intrinsic::dbg_value:
     case llvm::Intrinsic::donothing:
+    #if LLVM_VERSION_MAJOR > 14
     case llvm::Intrinsic::fake_use:
+    #endif
     case llvm::Intrinsic::instrprof_increment:
     case llvm::Intrinsic::instrprof_increment_step:
     case llvm::Intrinsic::instrprof_value_profile:
