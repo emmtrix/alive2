@@ -387,7 +387,7 @@ public:
       // (non-operand-bundle) version of @llvm.assume. its reason for
       // existing is that the optimizer is not free to remove
       // @llvm.assert, as it is @llvm.assume
-      if (fn_decl->getName() == "llvm.assert") {
+      if (fn_decl->getName() == "llvm.assert" || fn_decl->getName() == "__emx_assume") {
         auto &ctx = i.getContext();
         assert(fn->getFunctionType() ==
                llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
