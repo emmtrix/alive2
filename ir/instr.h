@@ -908,6 +908,58 @@ public:
     dup(Function &f, const std::string &suffix) const override;
 };
 
+class LoadStrided final : public MemInstr {
+  Value *ptr;
+  Value *stride;
+  uint64_t align;
+public:
+  LoadStrided(Type &type, std::string &&name, Value &ptr, Value &stride, uint64_t align)
+    : MemInstr(type, std::move(name)), ptr(&ptr), stride(&stride), align(align) {}
+
+  Value& getPtr() const { return *ptr; }
+  Value& getStride() const { return *stride; }
+
+  std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
+  uint64_t getMaxAccessSize() const override;
+  uint64_t getMaxGEPOffset() const override;
+  ByteAccessInfo getByteAccessInfo() const override;
+
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+};
+
+class LoadIndexed final : public MemInstr {
+  Value *ptr;
+  Value *indices;
+  uint64_t align;
+public:
+  LoadIndexed(Type &type, std::string &&name, Value &ptr, Value &indices, uint64_t align)
+    : MemInstr(type, std::move(name)), ptr(&ptr), indices(&indices), align(align) {}
+
+  Value& getPtr() const { return *ptr; }
+  Value& getIndices() const { return *indices; }
+
+  std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
+  uint64_t getMaxAccessSize() const override;
+  uint64_t getMaxGEPOffset() const override;
+  ByteAccessInfo getByteAccessInfo() const override;
+
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+};
+
 
 class Store final : public MemInstr {
   Value *ptr, *val;
@@ -920,6 +972,64 @@ public:
   Value& getPtr() const { return *ptr; }
   uint64_t getAlign() const { return align; }
   void setAlign(uint64_t align) { this->align = align; }
+
+  std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
+  uint64_t getMaxAccessSize() const override;
+  uint64_t getMaxAccessStride() const;
+  uint64_t getMaxGEPOffset() const override;
+  ByteAccessInfo getByteAccessInfo() const override;
+
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+};
+
+class StoreStrided final : public MemInstr {
+  Value *ptr, *val, *stride, *enable;
+  uint64_t align;
+public:
+  StoreStrided(Value &ptr, Value &val, Value &stride, Value &enable, uint64_t align)
+    : MemInstr(Type::voidTy, "store.strided"), ptr(&ptr), val(&val), stride(&stride), enable(&enable), align(align) {}
+
+  Value& getValue() const { return *val; }
+  Value& getPtr() const { return *ptr; }
+  Value& getStride() const { return *stride; }
+  Value& getEnable() const { return *enable; }
+  void setEnable(Value &en) { enable = &en; }
+
+  std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
+  uint64_t getMaxAccessSize() const override;
+  uint64_t getMaxAccessStride() const;
+  uint64_t getMaxGEPOffset() const override;
+  ByteAccessInfo getByteAccessInfo() const override;
+
+  std::vector<Value*> operands() const override;
+  bool propagatesPoison() const override;
+  void rauw(const Value &what, Value &with) override;
+  void print(std::ostream &os) const override;
+  StateValue toSMT(State &s) const override;
+  smt::expr getTypeConstraints(const Function &f) const override;
+  std::unique_ptr<Instr>
+    dup(Function &f, const std::string &suffix) const override;
+};
+
+class StoreIndexed final : public MemInstr {
+  Value *ptr, *val, *indices, *enable;
+  uint64_t align;
+public:
+  StoreIndexed(Value &ptr, Value &val, Value &indices, Value &enable, uint64_t align)
+    : MemInstr(Type::voidTy, "store.indexed"), ptr(&ptr), val(&val), indices(&indices), enable(&enable), align(align) {}
+
+  Value& getValue() const { return *val; }
+  Value& getPtr() const { return *ptr; }
+  Value& getIndices() const { return *indices; }
+  Value& getEnable() const { return *enable; }
+  void setEnable(Value &en) { enable = &en; }
 
   std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
   uint64_t getMaxAccessSize() const override;

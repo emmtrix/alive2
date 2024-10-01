@@ -18,8 +18,11 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Signals.h"
+#if LLVM_VERSION_MAJOR <= 14
+#include "llvm/Support/TargetParser.h"
+#else
 #include "llvm/TargetParser/Triple.h"
-
+#endif
 #include <fstream>
 #include <iostream>
 #include <utility>

@@ -24,7 +24,11 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
+#if LLVM_VERSION_MAJOR <= 14
+#include "llvm/Support/TargetParser.h"
+#else
 #include "llvm/TargetParser/Triple.h"
+#endif
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include <algorithm>
