@@ -2939,6 +2939,14 @@ void Phi::replaceSourceWith(const string &from, const string &to) {
   }
 }
 
+void Phi::setValue(size_t index, Value &val) {
+  values[index].first = &val;
+}
+
+void Phi::setSource(size_t index, string &&BB_name) {
+  values[index].second = std::move(BB_name);
+}
+
 vector<Value*> Phi::operands() const {
   vector<Value*> v;
   for (auto &[val, bb] : values) {
@@ -3803,6 +3811,7 @@ StateValue GEP::toSMT(State &s) const {
     AndExpr inbounds_np;
     AndExpr idx_all_zeros;
 
+    // FIXME: not implemented for physical pointers
     if (inbounds)
       inbounds_np.add(ptr.inbounds());
 
