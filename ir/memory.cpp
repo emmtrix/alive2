@@ -410,7 +410,7 @@ expr Byte::refined(const Byte &other) const {
   expr int_cnstr = true;
   if (does_int_mem_access) {
     if (bits_poison_per_byte == bits_byte) {
-      int_cnstr = (np2 & np1) == np1 && (v1 & np1) == (v2 & np1);
+      int_cnstr = (np2 & np1) == np1 && ((v1 & np1) == (v2 & np1) || v1 == v2);
     }
     else if (bits_poison_per_byte > 1) {
       assert((bits_byte % bits_poison_per_byte) == 0);
