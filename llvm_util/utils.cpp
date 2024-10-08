@@ -348,8 +348,10 @@ Value* get_operand(llvm::Value *v,
     if (auto *arr = dyn_cast<llvm::ArrayType>(gv->getValueType()))
       arb_size = arr->getNumElements() == 0;
 
+    bool is_accumulator = gv->getMetadata("emx.accumulator");
+
     auto val = make_unique<GlobalVariable>(*ty, std::move(name), size, align,
-                                           gv->isConstant(), arb_size);
+                                           gv->isConstant(), arb_size, is_accumulator);
     auto gvar = val.get();
     current_fn->addConstant(std::move(val));
     RETURN_CACHE(gvar);
