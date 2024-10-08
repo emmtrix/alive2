@@ -86,15 +86,19 @@ class GlobalVariable final : public Value {
   unsigned align;
   bool isconst;
   bool arbitrary_size;
+  bool is_accumulator;
 public:
   GlobalVariable(Type &type, std::string &&name, uint64_t allocsize,
-                 unsigned align, bool isconst, bool arbitrary_size) :
+                 unsigned align, bool isconst, bool arbitrary_size,
+                 bool is_accumulator = false) :
     Value(type, std::move(name)), allocsize(allocsize), align(align),
-    isconst(isconst), arbitrary_size(arbitrary_size) {}
+    isconst(isconst), arbitrary_size(arbitrary_size),
+    is_accumulator(is_accumulator) {}
   uint64_t size() const { return allocsize; }
   bool isArbitrarySize() const { return arbitrary_size; }
   unsigned getAlignment() const { return align; }
   bool isConst() const { return isconst; }
+  bool isAccumulator() const { return is_accumulator; }
   void increaseSize(uint64_t newsize);
   void print(std::ostream &os) const override;
   StateValue toSMT(State &s) const override;
