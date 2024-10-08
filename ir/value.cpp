@@ -85,6 +85,8 @@ void GlobalVariable::increaseSize(uint64_t newsize) {
 
 void GlobalVariable::print(ostream &os) const {
   os << getName() << " = " << (isconst ? "constant " : "global ");
+  if (is_accumulator)
+    os << "accumulator ";
   if (arbitrary_size)
     os << '?';
   else
