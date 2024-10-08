@@ -116,6 +116,7 @@ unsigned constexpr_idx;
 unsigned copy_idx;
 unsigned alignopbundle_idx;
 unsigned metadata_idx;
+unsigned range_idx;
 
 #define PARSE_UNOP()                       \
   auto ty = llvm_type2alive(i.getType());  \
@@ -569,7 +570,8 @@ public:
       return error(i);
 
     return make_unique<Memset>(*ptr, *val, *bytes,
-                               i.getDestAlign().valueOrOne().value());
+                               i.getDestAlign().valueOrOne().value(),
+                               i.isTailCall());
   }
 
   RetTy visitMemTransferInst(llvm::MemTransferInst &i) {
@@ -583,7 +585,7 @@ public:
     return make_unique<Memcpy>(*dst, *src, *bytes,
                                i.getDestAlign().valueOrOne().value(),
                                i.getSourceAlign().valueOrOne().value(),
-                               isa<llvm::MemMoveInst>(&i));
+                               isa<llvm::MemMoveInst>(&i), i.isTailCall());
   }
 
   RetTy visitICmpInst(llvm::ICmpInst &i) {
@@ -1587,8 +1589,9 @@ public:
     auto CR = attr.getValueAsConstantRange();
     vector<Value*> bounds{ make_intconst(CR.getLower()),
                            make_intconst(CR.getUpper()) };
+    string name = "%#range_" + to_string(range_idx++) + "_" + val.getName();
     return
-      make_unique<AssumeVal>(val.getType(), "%#range_" + val.getName(), val,
+      make_unique<AssumeVal>(val.getType(), std::move(name), val,
                              std::move(bounds), AssumeVal::Range,
                              is_welldefined);
   }
@@ -1908,6 +1911,7 @@ public:
     #else
     attrs.mem &= handleMemAttrs(i.getMemoryEffects());
     #endif
+    attrs.setTailCallSite(i.isTailCall());
     attrs.inferImpliedAttributes();
   }
 
@@ -1944,6 +1948,7 @@ public:
     copy_idx = 0;
     alignopbundle_idx = 0;
     metadata_idx = 0;
+    range_idx = 0;
 
     // don't even bother if number of BBs or instructions is huge..
     if (distance(f.begin(), f.end()) > 5000 ||
