@@ -13,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <sstream>
 #include <z3.h>
 
 #define DEBUG_Z3_RC 0
@@ -219,13 +220,20 @@ expr expr::mkInt(const char *n, unsigned bits) {
   return bits ? Z3_mk_numeral(ctx(), n, mkBVSort(bits)) : expr();
 }
 
+static expr to_uf_float_sort(expr&& e) {
+  if (get_uf_float() && e.isFloat())
+    return e.float2BV();
+  return e;
+}
+
 expr expr::mkFloat(double n, const expr &type) {
   C2(type);
-  return Z3_mk_fpa_numeral_double(ctx(), n, type.sort());
+  return to_uf_float_sort(Z3_mk_fpa_numeral_double(ctx(), n, type.sort()));
 }
 
 expr expr::mkHalf(float n) {
-  return Z3_mk_fpa_numeral_float(ctx(), n, Z3_mk_fpa_sort_half(ctx()));
+  return to_uf_float_sort(
+    Z3_mk_fpa_numeral_float(ctx(), n, Z3_mk_fpa_sort_half(ctx())));
 }
 
 static Z3_sort mk_bfloat_sort() {
@@ -233,29 +241,32 @@ static Z3_sort mk_bfloat_sort() {
 }
 
 expr expr::mkBFloat(float n) {
-  return Z3_mk_fpa_numeral_float(ctx(), n, mk_bfloat_sort());
+  return to_uf_float_sort(Z3_mk_fpa_numeral_float(ctx(), n, mk_bfloat_sort()));
 }
 
 expr expr::mkFloat(float n) {
-  return Z3_mk_fpa_numeral_float(ctx(), n, Z3_mk_fpa_sort_single(ctx()));
+  return to_uf_float_sort(
+    Z3_mk_fpa_numeral_float(ctx(), n, Z3_mk_fpa_sort_single(ctx())));
 }
 
 expr expr::mkDouble(double n) {
-  return Z3_mk_fpa_numeral_double(ctx(), n, Z3_mk_fpa_sort_double(ctx()));
+  return to_uf_float_sort(
+    Z3_mk_fpa_numeral_double(ctx(), n, Z3_mk_fpa_sort_double(ctx())));
 }
 
 expr expr::mkQuad(double n) {
-  return Z3_mk_fpa_numeral_double(ctx(), n, Z3_mk_fpa_sort_quadruple(ctx()));
+  return to_uf_float_sort(
+    Z3_mk_fpa_numeral_double(ctx(), n, Z3_mk_fpa_sort_quadruple(ctx())));
 }
 
 expr expr::mkNaN(const expr &type) {
   C2(type);
-  return Z3_mk_fpa_nan(ctx(), type.sort());
+  return to_uf_float_sort(Z3_mk_fpa_nan(ctx(), type.sort()));
 }
 
 expr expr::mkNumber(const char *n, const expr &type) {
   C2(type);
-  return Z3_mk_numeral(ctx(), n, type.sort());
+  return to_uf_float_sort(Z3_mk_numeral(ctx(), n, type.sort()));
 }
 
 expr expr::mkConst(Z3_decl decl) {
@@ -1137,9 +1148,43 @@ expr expr::round_up(const expr &power_of_two) const {
     return v.fn();                                       \
 } while (0)
 
+static expr uf_float(const char *prefix, vector<expr> args,
+                     const expr &range, bool is_commutative = false) {
+  ostringstream os;
+  os << prefix;
+  for (const expr& arg : args) {
+    os << '.';
+    arg.printSort(os);
+  }
+  os << '.';
+  range.printSort(os);
+
+  string name = std::move(os).str();
+  expr uf = expr::mkUF(name, args, range);
+  if (is_commutative) {
+    assert(args.size() >= 2);
+    assert(range.isBV() || range.isBool());
+    assert(args[0].isSameTypeOf(args[1]));
+
+    // Commutative functions are encoded as
+    //   op(x, y) = op'(x, y) & op'(y, x)
+    // where & is the bitwise and operator and op' is an uninterpreted function.
+    // This encoding comes from "SMT-based Translation Validation for Machine
+    // Learning Compiler" by Seongwon Bang, Seunghyeon Nam, Inwhan Chun,
+    // Ho Young Jhoo, and Juneyoung Lee
+
+    swap(args[0], args[1]);
+    expr uf2 = expr::mkUF(name, args, range);
+    if (range.isBool())
+      return uf && uf2;
+    return uf & uf2;
+  }
+  return uf;
+}
+
 expr expr::isNaN() const {
   if (get_uf_float())
-    return expr::mkUF("isNaN", {*this}, true);
+    return uf_float("isNaN", {*this}, true);
   
   fold_fp_neg(isNaN);
 
@@ -1152,7 +1197,7 @@ expr expr::isNaN() const {
 
 expr expr::isInf() const {
   if (get_uf_float())
-    return expr::mkUF("isInf", {*this}, true);
+    return uf_float("isInf", {*this}, true);
   
   fold_fp_neg(isInf);
 
@@ -1167,13 +1212,13 @@ expr expr::isFPZero() const {
   if (isBV())
     return extract(bits()-2, 0) == 0;
   if (get_uf_float())
-    return expr::mkUF("isFPZero", {*this}, true);
+    return uf_float("isFPZero", {*this}, true);
   return unop_fold(Z3_mk_fpa_is_zero);
 }
 
 expr expr::isFPNegative() const {
   if (get_uf_float())
-    return expr::mkUF("isFPNegative", {*this}, true);
+    return uf_float("isFPNegative", {*this}, true);
   return unop_fold(Z3_mk_fpa_is_negative);
 }
 
@@ -1183,13 +1228,13 @@ expr expr::isFPNegZero() const {
 
 expr expr::isFPNormal() const {
   if (get_uf_float())
-    return expr::mkUF("isFPNormal", {*this}, true);
+    return uf_float("isFPNormal", {*this}, true);
   return unop_fold(Z3_mk_fpa_is_normal);
 }
 
 expr expr::isFPSubNormal() const {
   if (get_uf_float())
-    return expr::mkUF("isFPSubNormal", {*this}, true);
+    return uf_float("isFPSubNormal", {*this}, true);
   return unop_fold(Z3_mk_fpa_is_subnormal);
 }
 
@@ -1216,35 +1261,35 @@ expr expr::rtz() {
 expr expr::fadd(const expr &rhs, const expr &rm) const {
   C(rhs, rm);
   if (get_uf_float())
-    return expr::mkCommutativeUF("fadd", {*this, rhs, rm}, *this);
+    return uf_float("fadd", {*this, rhs, rm}, *this, true);
   return simplify_const(Z3_mk_fpa_add(ctx(), rm(), ast(), rhs()), *this, rhs);
 }
 
 expr expr::fsub(const expr &rhs, const expr &rm) const {
   C(rhs, rm);
   if (get_uf_float())
-    return expr::mkUF("fsub", {*this, rhs, rm}, *this);
+    return uf_float("fsub", {*this, rhs, rm}, *this);
   return simplify_const(Z3_mk_fpa_sub(ctx(), rm(), ast(), rhs()), *this, rhs);
 }
 
 expr expr::fmul(const expr &rhs, const expr &rm) const {
   C(rhs, rm);
   if (get_uf_float())
-    return expr::mkCommutativeUF("fmul", {*this, rhs, rm}, *this);
+    return uf_float("fmul", {*this, rhs, rm}, *this, true);
   return simplify_const(Z3_mk_fpa_mul(ctx(), rm(), ast(), rhs()), *this, rhs);
 }
 
 expr expr::fdiv(const expr &rhs, const expr &rm) const {
   C(rhs, rm);
   if (get_uf_float())
-    return expr::mkUF("fdiv", {*this, rhs, rm}, *this);
+    return uf_float("fdiv", {*this, rhs, rm}, *this);
   return simplify_const(Z3_mk_fpa_div(ctx(), rm(), ast(), rhs()), *this, rhs);
 }
 
 expr expr::frem(const expr &rhs) const {
   C(rhs);
   if (get_uf_float())
-    return expr::mkUF("frem", {*this, rhs}, *this);
+    return uf_float("frem", {*this, rhs}, *this);
   return simplify_const(Z3_mk_fpa_rem(ctx(), ast(), rhs()), *this, rhs);
 }
 
@@ -1253,7 +1298,7 @@ expr expr::fabs() const {
     return mkUInt(0, 1).concat(extract(bits() - 2, 0));
 
   if (get_uf_float())
-    return expr::mkUF("fabs", {*this}, *this);
+    return uf_float("fabs", {*this}, *this);
 
   fold_fp_neg(fabs);
   return unop_fold(Z3_mk_fpa_abs);
@@ -1267,7 +1312,7 @@ expr expr::fneg() const {
   }
 
   if (get_uf_float())
-    return expr::mkUF("fneg", {*this}, *this);
+    return uf_float("fneg", {*this}, *this);
   
   return unop_fold(Z3_mk_fpa_neg);
 }
@@ -1280,14 +1325,14 @@ expr expr::copysign(const expr &sign) const {
 expr expr::sqrt(const expr &rm) const {
   C(rm);
   if (get_uf_float())
-    return expr::mkUF("sqrt", {*this, rm}, *this);
+    return uf_float("sqrt", {*this, rm}, *this);
   return simplify_const(Z3_mk_fpa_sqrt(ctx(), rm(), ast()), *this);
 }
 
 expr expr::fma(const expr &a, const expr &b, const expr &c, const expr &rm) {
   C2(a, b, c, rm);
   if (get_uf_float())
-    return expr::mkUF("fma", {a, b, c, rm}, a);
+    return uf_float("fma", {a, b, c, rm}, a);
   return simplify_const(Z3_mk_fpa_fma(ctx(), rm(), a(), b(), c()), a, b, c);
 }
 
@@ -1302,14 +1347,14 @@ expr expr::floor() const {
 expr expr::round(const expr &rm) const {
   C(rm);
   if (get_uf_float())
-    return expr::mkUF("round", {*this, rm}, *this);
+    return uf_float("round", {*this, rm}, *this);
   return
     simplify_const(Z3_mk_fpa_round_to_integral(ctx(), rm(), ast()), *this);
 }
 
 expr expr::foeq(const expr &rhs) const {
   if (get_uf_float())
-    return expr::mkCommutativeUF("foeq", {*this, rhs}, true);
+    return uf_float("foeq", {*this, rhs}, true, true);
   return binop_commutative(rhs, Z3_mk_fpa_eq);
 }
 
@@ -1323,7 +1368,7 @@ expr expr::foge(const expr &rhs) const {
 
 expr expr::folt(const expr &rhs) const {
   if (get_uf_float())
-    return expr::mkUF("folt", {*this, rhs}, true);
+    return uf_float("folt", {*this, rhs}, true);
   return binop_fold(rhs, Z3_mk_fpa_lt);
 }
 
@@ -1341,7 +1386,7 @@ expr expr::ford(const expr &rhs) const {
 
 expr expr::fueq(const expr &rhs) const {
   if (get_uf_float())
-    return expr::mkCommutativeUF("fueq", {*this, rhs}, true);
+    return uf_float("fueq", {*this, rhs}, true, true);
   return funo(rhs) || binop_commutative(rhs, Z3_mk_fpa_eq);
 }
 
@@ -1355,7 +1400,7 @@ expr expr::fuge(const expr &rhs) const {
 
 expr expr::fult(const expr &rhs) const {
   if (get_uf_float())
-    return expr::mkUF("fult", {*this, rhs}, true);
+    return uf_float("fult", {*this, rhs}, true);
   return funo(rhs) || binop_fold(rhs, Z3_mk_fpa_lt);
 }
 
@@ -2002,7 +2047,7 @@ expr expr::BV2float(const expr &type) const {
 expr expr::float2Float(const expr &type, const expr &rm) const {
   C(type, rm);
   if (get_uf_float())
-    return expr::mkUF("float2Float", {*this, rm}, type);
+    return uf_float("float2Float", {*this, rm}, type);
   return simplify_const(Z3_mk_fpa_to_fp_float(ctx(), rm(), ast(), type.sort()),
                         *this);
 }
@@ -2010,21 +2055,21 @@ expr expr::float2Float(const expr &type, const expr &rm) const {
 expr expr::fp2sint(unsigned bits, const expr &rm) const {
   C(rm);
   if (get_uf_float())
-    return expr::mkUF("fp2sint", {*this, rm}, expr::mkUInt(0, bits));
+    return uf_float("fp2sint", {*this, rm}, expr::mkUInt(0, bits));
   return simplify_const(Z3_mk_fpa_to_sbv(ctx(), rm(), ast(), bits), *this);
 }
 
 expr expr::fp2uint(unsigned bits, const expr &rm) const {
   C(rm);
   if (get_uf_float())
-    return expr::mkUF("fp2uint", {*this, rm}, expr::mkUInt(0, bits));
+    return uf_float("fp2uint", {*this, rm}, expr::mkUInt(0, bits));
   return simplify_const(Z3_mk_fpa_to_ubv(ctx(), rm(), ast(), bits), *this);
 }
 
 expr expr::sint2fp(const expr &type, const expr &rm) const {
   C(type, rm);
   if (get_uf_float())
-    return expr::mkUF("sint2fp", {*this, rm}, type);
+    return uf_float("sint2fp", {*this, rm}, type);
   return simplify_const(Z3_mk_fpa_to_fp_signed(ctx(), rm(), ast(), type.sort()),
                         *this);
 }
@@ -2032,7 +2077,7 @@ expr expr::sint2fp(const expr &type, const expr &rm) const {
 expr expr::uint2fp(const expr &type, const expr &rm) const {
   C(type, rm);
   if (get_uf_float())
-    return expr::mkUF("uint2fp", {*this, rm}, type);
+    return uf_float("uint2fp", {*this, rm}, type);
   return
     simplify_const(Z3_mk_fpa_to_fp_unsigned(ctx(), rm(), ast(), type.sort()),
                    *this);
@@ -2055,27 +2100,6 @@ expr expr::mkUF(const char *name, const vector<expr> &args, const expr &range) {
   auto decl = Z3_mk_func_decl(ctx(), Z3_mk_string_symbol(ctx(), name),
                               num_args, z3_sorts.data(), range.sort());
   return Z3_mk_app(ctx(), decl, num_args, z3_args.data());
-}
-
-expr expr::mkCommutativeUF(const string &name, vector<expr> args,
-                           const expr &range) {
-
-  // Commutative functions are encoded as
-  //   op(x, y) = op'(x, y) & op'(y, x)
-  // where & is the bitwise and operator and op' is an uninterpreted function.
-  // This encoding comes from "SMT-based Translation Validation for Machine
-  // Learning Compiler" by Seongwon Bang, Seunghyeon Nam, Inwhan Chun,
-  // Ho Young Jhoo, and Juneyoung Lee
-
-  assert(args.size() >= 2);
-  assert(range.isBV() || range.isBool());
-  assert(args[0].isSameTypeOf(args[1]));
-  expr uf = expr::mkUF(name, args, range);
-  swap(args[0], args[1]);
-  expr uf2 = expr::mkUF(name, args, range);
-  if (range.isBool())
-    return uf && uf2;
-  return uf & uf2;
 }
 
 expr expr::mkArray(const char *name, const expr &domain, const expr &range) {
@@ -2409,6 +2433,10 @@ void expr::printSigned(ostream &os) const {
 void expr::printHexadecimal(ostream &os) const {
   auto rem = bits() % 4;
   os << (rem == 0 ? *this : zext(4 - rem));
+}
+
+void expr::printSort(ostream &os) const {
+  os << Z3_sort_to_string(ctx(), sort());
 }
 
 string expr::numeral_string() const {
