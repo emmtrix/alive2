@@ -1250,7 +1250,8 @@ void Memory::store(const Pointer &ptr,
 void Memory::storeLambda(const Pointer &ptr, const expr &offset,
                          const expr &bytes,
                          const vector<pair<unsigned, expr>> &data,
-                         const set<expr> &undef, uint64_t align) {
+                         const set<expr> &undef, uint64_t align,
+                         bool is_padding) {
   assert(!state->isInitializationPhase());
 
   bool val_no_offset = data.size() == 1 && !data[0].second.vars().count(offset);
@@ -1291,15 +1292,18 @@ void Memory::storeLambda(const Pointer &ptr, const expr &offset,
     blk.type |= stored_ty;
     blk.undef.insert(undef.begin(), undef.end());
 
-    uint64_t n;
-    if (blk.store_offsets.has_value() && bytes.isUInt(n) && n < 128) {
-      for (uint64_t i = 0; i < n; i++) {
-        Pointer pointer = ptr;
-        pointer += expr::mkUInt(i, Pointer::bitsShortOffset());;
-        blk.store_offsets->insert(pointer.getShortOffset());
+    if (!is_padding) {
+      uint64_t n;
+      if (blk.store_offsets.has_value() && bytes.isUInt(n) && n < 128) {
+        for (uint64_t i = 0; i < n; i++) {
+          Pointer pointer = ptr;
+          pointer += expr::mkUInt(i, Pointer::bitsShortOffset());
+          ;
+          blk.store_offsets->insert(pointer.getShortOffset());
+        }
+      } else {
+        blk.store_offsets.reset();
       }
-    } else {
-      blk.store_offsets.reset();
     }
   };
 
@@ -2302,7 +2306,7 @@ Byte Memory::raw_load(const Pointer &p) {
 
 void Memory::memset(const expr &p, const StateValue &val, const expr &bytesize,
                     uint64_t align, const set<expr> &undef_vars,
-                    bool deref_check) {
+                    bool deref_check, bool is_padding) {
   assert(!memory_unused());
   assert(!val.isValid() || val.bits() == 8);
   unsigned bytesz = bits_byte / 8;
@@ -2321,7 +2325,7 @@ void Memory::memset(const expr &p, const StateValue &val, const expr &bytesize,
   expr raw_byte = std::move(bytes[0])();
 
   uint64_t n;
-  if (bytesize.isUInt(n) && (n / bytesz) <= 4) {
+  if (bytesize.isUInt(n) && (n / bytesz) <= 4 && !is_padding) {
     vector<pair<unsigned, expr>> to_store;
     for (unsigned i = 0; i < n; i += bytesz) {
       to_store.emplace_back(i, raw_byte);
@@ -2330,7 +2334,8 @@ void Memory::memset(const expr &p, const StateValue &val, const expr &bytesize,
   } else {
     expr offset
       = expr::mkFreshVar("#off", expr::mkUInt(0, Pointer::bitsShortOffset()));
-    storeLambda(ptr, offset, bytesize, {{0, raw_byte}}, undef_vars, align);
+    storeLambda(ptr, offset, bytesize, {{0, raw_byte}},
+                undef_vars, align, is_padding);
   }
 }
 
