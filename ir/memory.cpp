@@ -2559,7 +2559,7 @@ expr Memory::blockRefined(const Pointer &src, const Pointer &tgt, unsigned bid,
   optional<set<expr>> src_store_offsets = src.getMemory().non_local_block_val[bid].store_offsets;
   optional<set<expr>> tgt_store_offsets = tgt.getMemory().non_local_block_val[bid].store_offsets;
     
-  if (src_store_offsets.has_value() && tgt_store_offsets.has_value()) {
+  if (src_store_offsets.has_value() && tgt_store_offsets.has_value() && false) {
     val_refines = true;
     set<expr> store_offsets = src_store_offsets.value();
     store_offsets.insert(tgt_store_offsets->begin(), tgt_store_offsets->end());
