@@ -1292,7 +1292,16 @@ void Memory::storeLambda(const Pointer &ptr, const expr &offset,
     blk.type |= stored_ty;
     blk.undef.insert(undef.begin(), undef.end());
 
-    blk.store_offsets.reset();
+    uint64_t n;
+    if (blk.store_offsets.has_value() && bytes.isUInt(n) && n < 128) {
+      for (uint64_t i = 0; i < n; i++) {
+        Pointer pointer = ptr;
+        pointer += expr::mkUInt(i, Pointer::bitsShortOffset());;
+        blk.store_offsets->insert(pointer.getShortOffset());
+      }
+    } else {
+      blk.store_offsets.reset();
+    }
   };
 
   access(ptr, bytes.zextOrTrunc(bits_size_t), align, true, fn);
@@ -2513,7 +2522,6 @@ expr Memory::blockRefined(const Pointer &src, const Pointer &tgt, unsigned bid,
     set<expr> store_offsets = src_store_offsets.value();
     store_offsets.insert(tgt_store_offsets->begin(), tgt_store_offsets->end());
     for (const expr &offset : store_offsets) {
-      cout << offset << endl;
       val_refines
         &= (ptr_offset == offset).implies(
               blockValRefined(tgt.getMemory(), bid, false, offset, undef));
