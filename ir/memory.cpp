@@ -13,7 +13,6 @@
 #include <array>
 #include <numeric>
 #include <string>
-#include <iostream>
 
 using namespace IR;
 using namespace smt;
