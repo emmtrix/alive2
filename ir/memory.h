@@ -139,12 +139,12 @@ class Memory {
     std::set<smt::expr> undef;
     unsigned char type = DATA_ANY;
 
-    std::set<smt::expr> store_offsets;
+    std::optional<std::set<smt::expr>> store_offsets;
 
-    MemBlock() {}
-    MemBlock(smt::expr &&val) : val(std::move(val)) {}
+    MemBlock() : store_offsets({}) {}
+    MemBlock(smt::expr &&val) : val(std::move(val)), store_offsets({}) {}
     MemBlock(smt::expr &&val, DataType type)
-      : val(std::move(val)), type(type) {}
+      : val(std::move(val)), type(type), store_offsets({}) {}
 
     std::weak_ordering operator<=>(const MemBlock &rhs) const;
   };

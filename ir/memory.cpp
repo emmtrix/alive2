@@ -13,6 +13,7 @@
 #include <array>
 #include <numeric>
 #include <string>
+#include <iostream>
 
 using namespace IR;
 using namespace smt;
@@ -1205,7 +1206,8 @@ void Memory::store(const Pointer &ptr,
     expr offset = ptr.getShortOffset();
     for (auto &[idx, val] : data) {
       expr off = offset + expr::mkUInt(idx >> Pointer::zeroBitsShortOffset(), offset);
-      blk.store_offsets.insert(off);
+      if (blk.store_offsets.has_value())
+        blk.store_offsets->insert(off);
     }
 
     // optimization: if fully rewriting the block, don't bother with the old
@@ -1289,6 +1291,8 @@ void Memory::storeLambda(const Pointer &ptr, const expr &offset,
 
     blk.type |= stored_ty;
     blk.undef.insert(undef.begin(), undef.end());
+
+    blk.store_offsets.reset();
   };
 
   access(ptr, bytes.zextOrTrunc(bits_size_t), align, true, fn);
@@ -2495,19 +2499,40 @@ expr Memory::blockValRefined(const Memory &other, unsigned bid, bool local,
 
 expr Memory::blockRefined(const Pointer &src, const Pointer &tgt, unsigned bid,
                           set<expr> &undef) const {
-  
+  unsigned bytes_per_byte = bits_byte / 8;
+
   expr blk_size = src.blockSize();
   expr ptr_offset = src.getShortOffset();
-  
-  set<expr> store_offsets = src.getMemory().non_local_block_val[bid].store_offsets;
-  set<expr> tgt_store_offsets = tgt.getMemory().non_local_block_val[bid].store_offsets;
-  store_offsets.insert(tgt_store_offsets.begin(), tgt_store_offsets.end());
+  expr val_refines;
 
-  expr val_refines = true;
-  for (const expr &offset : store_offsets) {
-    val_refines
-      &= (ptr_offset == offset).implies(
-            blockValRefined(tgt.getMemory(), bid, false, offset, undef));
+  optional<set<expr>> src_store_offsets = src.getMemory().non_local_block_val[bid].store_offsets;
+  optional<set<expr>> tgt_store_offsets = tgt.getMemory().non_local_block_val[bid].store_offsets;
+    
+  if (src_store_offsets.has_value() && tgt_store_offsets.has_value()) {
+    val_refines = true;
+    set<expr> store_offsets = src_store_offsets.value();
+    store_offsets.insert(tgt_store_offsets->begin(), tgt_store_offsets->end());
+    for (const expr &offset : store_offsets) {
+      cout << offset << endl;
+      val_refines
+        &= (ptr_offset == offset).implies(
+              blockValRefined(tgt.getMemory(), bid, false, offset, undef));
+    }
+  } else {
+    uint64_t bytes;
+    if (blk_size.isUInt(bytes) && (bytes / bytes_per_byte) <= 8) {
+      val_refines = true;
+      for (unsigned off = 0; off < (bytes / bytes_per_byte); ++off) {
+        expr off_expr = expr::mkUInt(off, Pointer::bitsShortOffset());
+        val_refines
+          &= (ptr_offset == off_expr).implies(
+              blockValRefined(tgt.getMemory(), bid, false, off_expr, undef));
+      }
+    } else {
+      val_refines
+        = src.getOffsetSizet().ult(src.blockSizeOffsetT()).implies(
+            blockValRefined(tgt.getMemory(), bid, false, ptr_offset, undef));
+    }
   }
 
   expr aligned(true);
@@ -2689,7 +2714,11 @@ Memory Memory::mkIf(const expr &cond, Memory &&then, Memory &&els) {
     blk.val     = mk_block_if(cond, blk.val, other.val);
     blk.type   |= other.type;
     blk.undef.insert(other.undef.begin(), other.undef.end());
-    blk.store_offsets.insert(other.store_offsets.begin(), other.store_offsets.end());
+    if (blk.store_offsets.has_value() && other.store_offsets.has_value()) {
+      blk.store_offsets->insert(other.store_offsets->begin(), other.store_offsets->end());
+    } else {
+      blk.store_offsets.reset();
+    }
   }
   for (unsigned bid = 0, end = ret.numLocals(); bid < end; ++bid) {
     auto &blk   = ret.local_block_val[bid];
@@ -2697,7 +2726,11 @@ Memory Memory::mkIf(const expr &cond, Memory &&then, Memory &&els) {
     blk.val     = mk_block_if(cond, blk.val, other.val);
     blk.type   |= other.type;
     blk.undef.insert(other.undef.begin(), other.undef.end());
-    blk.store_offsets.insert(other.store_offsets.begin(), other.store_offsets.end());
+    if (blk.store_offsets.has_value() && other.store_offsets.has_value()) {
+      blk.store_offsets->insert(other.store_offsets->begin(), other.store_offsets->end());
+    } else {
+      blk.store_offsets.reset();
+    }
   }
   ret.non_local_block_liveness = expr::mkIf(cond, then.non_local_block_liveness,
                                             els.non_local_block_liveness);
