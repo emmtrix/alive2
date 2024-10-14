@@ -191,12 +191,13 @@ class Memory {
   void mkNonlocalValAxioms(bool skip_consts) const;
 
   bool mayalias(bool local, unsigned bid, const smt::expr &offset,
-                unsigned bytes, uint64_t align, bool write) const;
+                const smt::expr &bytes, uint64_t align, bool write) const;
 
-  AliasSet computeAliasing(const Pointer &ptr, unsigned bytes, uint64_t align,
-                           bool write) const;
+  AliasSet computeAliasing(const Pointer &ptr, const smt::expr &bytes,
+                           uint64_t align, bool write) const;
 
-  void access(const Pointer &ptr, unsigned btyes, uint64_t align, bool write,
+  void access(const Pointer &ptr, const smt::expr &bytes, uint64_t align,
+              bool write,
               const std::function<void(MemBlock&, const Pointer&,
                                        smt::expr&&)> &fn);
 
@@ -244,10 +245,12 @@ public:
   class CallState {
     std::vector<smt::expr> non_local_block_val;
     smt::expr non_local_liveness;
+    smt::expr writes_block;
     smt::expr writes_args;
-    bool empty = true;
+    smt::expr frees_block;
 
   public:
+    smt::expr writes(unsigned idx) const;
     static CallState mkIf(const smt::expr &cond, const CallState &then,
                           const CallState &els);
     smt::expr operator==(const CallState &rhs) const;
@@ -355,9 +358,8 @@ public:
 
   void fillPoison(const smt::expr &bid);
 
-  smt::expr ptr2int(const smt::expr &ptr) const;
+  smt::expr ptr2int(const smt::expr &ptr);
   smt::expr int2ptr(const smt::expr &val) const;
-  Pointer searchPointer(const smt::expr &val) const;
 
   std::tuple<smt::expr, Pointer, std::set<smt::expr>>
     refined(const Memory &other, bool fncall,
