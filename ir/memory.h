@@ -223,7 +223,8 @@ class Memory {
   void storeLambda(const Pointer &ptr, const smt::expr &offset,
                    const smt::expr &bytes,
                    const std::vector<std::pair<unsigned, smt::expr>> &data,
-                   const std::set<smt::expr> &undef, uint64_t align);
+                   const std::set<smt::expr> &undef, uint64_t align,
+                   bool is_padding = false);
 
   smt::expr blockValRefined(const Memory &other, unsigned bid, bool local,
                             const smt::expr &offset,
@@ -346,7 +347,8 @@ public:
 
   void memset(const smt::expr &ptr, const StateValue &val,
               const smt::expr &bytesize, uint64_t align,
-              const std::set<smt::expr> &undef_vars, bool deref_check = true);
+              const std::set<smt::expr> &undef_vars, bool deref_check = true,
+              bool is_padding = false);
 
   void memset_pattern(const smt::expr &ptr, const smt::expr &pattern,
                       const smt::expr &bytesize, unsigned pattern_length);
