@@ -18,8 +18,6 @@
 #include <utility>
 #include <vector>
 
-#include <iostream>
-
 namespace smt { class Model; }
 
 namespace IR {
@@ -141,7 +139,7 @@ class Memory {
     std::set<smt::expr> undef;
     unsigned char type = DATA_ANY;
 
-    std::set<smt::expr> store_offsets;
+    std::optional<std::set<smt::expr>> store_offsets = std::set<smt::expr>();
 
     MemBlock() {}
     MemBlock(smt::expr &&val) : val(std::move(val)) {}
