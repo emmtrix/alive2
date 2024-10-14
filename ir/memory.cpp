@@ -2505,7 +2505,6 @@ expr Memory::blockRefined(const Pointer &src, const Pointer &tgt, unsigned bid,
 
   expr val_refines = true;
   for (const expr &offset : store_offsets) {
-    std::cout << offset << std::endl;
     val_refines
       &= (ptr_offset == offset).implies(
             blockValRefined(tgt.getMemory(), bid, false, offset, undef));
