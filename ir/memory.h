@@ -18,8 +18,6 @@
 #include <utility>
 #include <vector>
 
-#include <iostream>
-
 namespace smt { class Model; }
 
 namespace IR {
