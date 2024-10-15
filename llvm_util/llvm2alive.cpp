@@ -419,26 +419,26 @@ public:
           uint64_t align = DL().getABITypeAlign(element_type).value();
 
           if (is_load_strided) {
-            return make_unique<LoadStrided>(
+            return make_unique<EMXSimdLoadStrided>(
               *ty, value_name(i),
               *args.at(0),
               *args.at(1),
               align);
           } else if (is_store_strided) {
-            return make_unique<StoreStrided>(
+            return make_unique<EMXSimdStoreStrided>(
               *args.at(0),
               *args.at(1),
               *args.at(2),
               *args.at(3),
               align);
           } else if (is_load_indexed) {
-            return make_unique<LoadIndexed>(
+            return make_unique<EMXSimdLoadIndexed>(
               *ty, value_name(i),
               *args.at(0),
               *args.at(1),
               align);
           } else if (is_store_indexed) {
-            return make_unique<StoreIndexed>(
+            return make_unique<EMXSimdStoreIndexed>(
               *args.at(0),
               *args.at(1),
               *args.at(2),

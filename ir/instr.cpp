@@ -4070,37 +4070,37 @@ unique_ptr<Instr> Load::dup(Function &f, const string &suffix) const {
   return make_unique<Load>(getType(), getName() + suffix, *ptr, align);
 }
 
-DEFINE_AS_RETZEROALIGN(LoadStrided, getMaxAllocSize);
-DEFINE_AS_RETZERO(LoadStrided, getMaxGEPOffset);
+DEFINE_AS_RETZEROALIGN(EMXSimdLoadStrided, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdLoadStrided, getMaxGEPOffset);
 
-uint64_t LoadStrided::getMaxAccessSize() const {
+uint64_t EMXSimdLoadStrided::getMaxAccessSize() const {
   return UINT64_MAX;
 }
 
-MemInstr::ByteAccessInfo LoadStrided::getByteAccessInfo() const {
+MemInstr::ByteAccessInfo EMXSimdLoadStrided::getByteAccessInfo() const {
   return ByteAccessInfo::get(getType(), false, align);
 }
 
-vector<Value*> LoadStrided::operands() const {
+vector<Value*> EMXSimdLoadStrided::operands() const {
   return { ptr, stride };
 }
 
-bool LoadStrided::propagatesPoison() const {
+bool EMXSimdLoadStrided::propagatesPoison() const {
   return true;
 }
 
-void LoadStrided::rauw(const Value &what, Value &with) {
+void EMXSimdLoadStrided::rauw(const Value &what, Value &with) {
   RAUW(ptr);
   RAUW(stride);
 }
 
-void LoadStrided::print(ostream &os) const {
-  os << getName() << " = load.strided " << getType() << ", " << *ptr
+void EMXSimdLoadStrided::print(ostream &os) const {
+  os << getName() << " = emx.simd.load_strided " << getType() << ", " << *ptr
      << ", stride " << *stride
      << ", align " << align;
 }
 
-StateValue LoadStrided::toSMT(State &s) const {
+StateValue EMXSimdLoadStrided::toSMT(State &s) const {
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_load(s, base_pointer);
   
@@ -4120,48 +4120,48 @@ StateValue LoadStrided::toSMT(State &s) const {
   return getType().getAsAggregateType()->aggregateVals(values);
 }
 
-expr LoadStrided::getTypeConstraints(const Function &f) const {
+expr EMXSimdLoadStrided::getTypeConstraints(const Function &f) const {
   return Value::getTypeConstraints() &&
          getType().enforceVectorType() &&
          ptr->getType().enforcePtrType() &&
          stride->getType().enforceIntType();
 }
 
-unique_ptr<Instr> LoadStrided::dup(Function &f, const string &suffix) const {
-  return make_unique<LoadStrided>(getType(), getName() + suffix, *ptr, *stride, align);
+unique_ptr<Instr> EMXSimdLoadStrided::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdLoadStrided>(getType(), getName() + suffix, *ptr, *stride, align);
 }
 
-DEFINE_AS_RETZEROALIGN(LoadIndexed, getMaxAllocSize);
-DEFINE_AS_RETZERO(LoadIndexed, getMaxGEPOffset);
+DEFINE_AS_RETZEROALIGN(EMXSimdLoadIndexed, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdLoadIndexed, getMaxGEPOffset);
 
-uint64_t LoadIndexed::getMaxAccessSize() const {
+uint64_t EMXSimdLoadIndexed::getMaxAccessSize() const {
   return UINT64_MAX;
 }
 
-MemInstr::ByteAccessInfo LoadIndexed::getByteAccessInfo() const {
+MemInstr::ByteAccessInfo EMXSimdLoadIndexed::getByteAccessInfo() const {
   return ByteAccessInfo::get(getType(), false, align);
 }
 
-vector<Value*> LoadIndexed::operands() const {
+vector<Value*> EMXSimdLoadIndexed::operands() const {
   return { ptr, indices };
 }
 
-bool LoadIndexed::propagatesPoison() const {
+bool EMXSimdLoadIndexed::propagatesPoison() const {
   return true;
 }
 
-void LoadIndexed::rauw(const Value &what, Value &with) {
+void EMXSimdLoadIndexed::rauw(const Value &what, Value &with) {
   RAUW(ptr);
   RAUW(indices);
 }
 
-void LoadIndexed::print(ostream &os) const {
-  os << getName() << " = load.indexed " << getType() << ", " << *ptr
+void EMXSimdLoadIndexed::print(ostream &os) const {
+  os << getName() << " = emx.simd.load_indexed " << getType() << ", " << *ptr
      << ", indices " << *indices
      << ", align " << align;
 }
 
-StateValue LoadIndexed::toSMT(State &s) const {
+StateValue EMXSimdLoadIndexed::toSMT(State &s) const {
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_load(s, base_pointer);
   
@@ -4186,15 +4186,15 @@ StateValue LoadIndexed::toSMT(State &s) const {
   return getType().getAsAggregateType()->aggregateVals(values);
 }
 
-expr LoadIndexed::getTypeConstraints(const Function &f) const {
+expr EMXSimdLoadIndexed::getTypeConstraints(const Function &f) const {
   return Value::getTypeConstraints() &&
          getType().enforceVectorType() &&
          ptr->getType().enforcePtrType() &&
          indices->getType().enforceVectorType();
 }
 
-unique_ptr<Instr> LoadIndexed::dup(Function &f, const string &suffix) const {
-  return make_unique<LoadIndexed>(getType(), getName() + suffix, *ptr, *indices, align);
+unique_ptr<Instr> EMXSimdLoadIndexed::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdLoadIndexed>(getType(), getName() + suffix, *ptr, *indices, align);
 }
 
 
@@ -4251,40 +4251,40 @@ unique_ptr<Instr> Store::dup(Function &f, const string &suffix) const {
 }
 
 
-DEFINE_AS_RETZEROALIGN(StoreStrided, getMaxAllocSize);
-DEFINE_AS_RETZERO(StoreStrided, getMaxGEPOffset);
+DEFINE_AS_RETZEROALIGN(EMXSimdStoreStrided, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdStoreStrided, getMaxGEPOffset);
 
-uint64_t StoreStrided::getMaxAccessSize() const {
+uint64_t EMXSimdStoreStrided::getMaxAccessSize() const {
   return UINT64_MAX;
 }
 
-MemInstr::ByteAccessInfo StoreStrided::getByteAccessInfo() const {
+MemInstr::ByteAccessInfo EMXSimdStoreStrided::getByteAccessInfo() const {
   return ByteAccessInfo::get(val->getType(), true, align);
 }
 
-vector<Value*> StoreStrided::operands() const {
+vector<Value*> EMXSimdStoreStrided::operands() const {
   return { val, ptr, stride, enable };
 }
 
-bool StoreStrided::propagatesPoison() const {
+bool EMXSimdStoreStrided::propagatesPoison() const {
   return false;
 }
 
-void StoreStrided::rauw(const Value &what, Value &with) {
+void EMXSimdStoreStrided::rauw(const Value &what, Value &with) {
   RAUW(val);
   RAUW(ptr);
   RAUW(stride);
   RAUW(enable);
 }
 
-void StoreStrided::print(ostream &os) const {
-  os << "store.strided " << *val << ", " << *ptr
+void EMXSimdStoreStrided::print(ostream &os) const {
+  os << "emx.simd.store_strided " << *val << ", " << *ptr
      << ", stride " << *stride
      << ", enable " << *enable
      << ", align " << align;
 }
 
-StateValue StoreStrided::toSMT(State &s) const {
+StateValue EMXSimdStoreStrided::toSMT(State &s) const {
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_store(s, base_pointer);
   
@@ -4307,51 +4307,51 @@ StateValue StoreStrided::toSMT(State &s) const {
   return {};
 }
 
-expr StoreStrided::getTypeConstraints(const Function &f) const {
+expr EMXSimdStoreStrided::getTypeConstraints(const Function &f) const {
   return ptr->getType().enforcePtrType() &&
          stride->getType().enforceIntType() &&
          enable->getType().enforceVectorType();
 }
 
-unique_ptr<Instr> StoreStrided::dup(Function &f, const string &suffix) const {
-  return make_unique<StoreStrided>(*ptr, *val, *stride, *enable, align);
+unique_ptr<Instr> EMXSimdStoreStrided::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdStoreStrided>(*ptr, *val, *stride, *enable, align);
 }
 
 
-DEFINE_AS_RETZEROALIGN(StoreIndexed, getMaxAllocSize);
-DEFINE_AS_RETZERO(StoreIndexed, getMaxGEPOffset);
+DEFINE_AS_RETZEROALIGN(EMXSimdStoreIndexed, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdStoreIndexed, getMaxGEPOffset);
 
-uint64_t StoreIndexed::getMaxAccessSize() const {
+uint64_t EMXSimdStoreIndexed::getMaxAccessSize() const {
   return UINT64_MAX;
 }
 
-MemInstr::ByteAccessInfo StoreIndexed::getByteAccessInfo() const {
+MemInstr::ByteAccessInfo EMXSimdStoreIndexed::getByteAccessInfo() const {
   return ByteAccessInfo::get(val->getType(), true, align);
 }
 
-vector<Value*> StoreIndexed::operands() const {
+vector<Value*> EMXSimdStoreIndexed::operands() const {
   return { val, ptr, indices, enable };
 }
 
-bool StoreIndexed::propagatesPoison() const {
+bool EMXSimdStoreIndexed::propagatesPoison() const {
   return false;
 }
 
-void StoreIndexed::rauw(const Value &what, Value &with) {
+void EMXSimdStoreIndexed::rauw(const Value &what, Value &with) {
   RAUW(val);
   RAUW(ptr);
   RAUW(indices);
   RAUW(enable);
 }
 
-void StoreIndexed::print(ostream &os) const {
-  os << "store.indexed " << *val << ", " << *ptr
+void EMXSimdStoreIndexed::print(ostream &os) const {
+  os << "emx.simd.store_indexed " << *val << ", " << *ptr
      << ", indices " << *indices
      << ", enable " << *enable
      << ", align " << align;
 }
 
-StateValue StoreIndexed::toSMT(State &s) const {
+StateValue EMXSimdStoreIndexed::toSMT(State &s) const {
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_store(s, base_pointer);
   
@@ -4378,14 +4378,14 @@ StateValue StoreIndexed::toSMT(State &s) const {
   return {};
 }
 
-expr StoreIndexed::getTypeConstraints(const Function &f) const {
+expr EMXSimdStoreIndexed::getTypeConstraints(const Function &f) const {
   return ptr->getType().enforcePtrType() &&
          indices->getType().enforceVectorType() &&
          enable->getType().enforceVectorType();
 }
 
-unique_ptr<Instr> StoreIndexed::dup(Function &f, const string &suffix) const {
-  return make_unique<StoreIndexed>(*ptr, *val, *indices, *enable, align);
+unique_ptr<Instr> EMXSimdStoreIndexed::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdStoreIndexed>(*ptr, *val, *indices, *enable, align);
 }
 
 
