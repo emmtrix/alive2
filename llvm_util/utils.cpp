@@ -164,9 +164,11 @@ Type* llvm_type2alive(const llvm::Type *ty) {
         auto ofs = layout->getElementOffset(i);
         auto sz = DL->getTypeStoreSize(e);
 
+#if LLVM_VERSION_MAJOR > 14
         // TODO: support vscale
         if (ofs.isScalable() || sz.isScalable())
           return nullptr;
+#endif
 
         if (auto ty = llvm_type2alive(e)) {
           elems.push_back(ty);
@@ -177,9 +179,11 @@ Type* llvm_type2alive(const llvm::Type *ty) {
         auto ofs_next = i + 1 == strty->getNumElements() ?
                 DL->getTypeAllocSize(const_cast<llvm::StructType *>(strty)) :
                 layout->getElementOffset(i + 1);
+#if LLVM_VERSION_MAJOR > 14
         // TODO: support vscale
         if (ofs_next.isScalable())
           return nullptr;
+#endif
         assert(ofs + sz <= ofs_next);
 
         if (ofs_next != ofs + sz) {
@@ -381,9 +385,14 @@ Value* get_operand(llvm::Value *v,
   }
 
   if (auto fn = dyn_cast<llvm::Function>(v)) {
+    #if LLVM_VERSION_MAJOR <= 14
+    uint64_t align = fn->getAlign().getValueOr(llvm::Align(8)).value();
+    #else
+    uint64_t align = fn->getAlign().value_or(llvm::Align(8)).value();
+    #endif
     auto val = make_unique<GlobalVariable>(
       *ty, '@' + fn->getName().str(), 0,
-      fn->getAlign().value_or(llvm::Align(8)).value(), true, true);
+      align, true, true);
     auto gvar = val.get();
     current_fn->addConstant(std::move(val));
 
