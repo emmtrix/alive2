@@ -21,6 +21,8 @@
 #else
 #include "llvm/Support/ModRef.h"
 #endif
+#include "llvm/Demangle/Demangle.h"
+
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -383,12 +385,81 @@ public:
       // (non-operand-bundle) version of @llvm.assume. its reason for
       // existing is that the optimizer is not free to remove
       // @llvm.assert, as it is @llvm.assume
-      if (fn_decl->getName() == "llvm.assert") {
+
+      // __emx_assume is an alias for llvm.assert which may be emitted by
+      // a C/C++ compiler. We use it when we need to encode an assumption
+      // which may not be used by LLVM's optimizer. 
+      if (fn_decl->getName() == "llvm.assert" || fn_decl->getName() == "__emx_assume") {
         auto &ctx = i.getContext();
         assert(fn->getFunctionType() ==
                llvm::FunctionType::get(llvm::Type::getVoidTy(ctx),
                                        { llvm::Type::getInt1Ty(ctx) }, false));
         return make_unique<Assume>(*args.at(0), Assume::AndNonPoison);
+      }
+      
+      // Some custom instructions are generic. We use C++'s name mangling for
+      // the different overloads.
+      llvm::ItaniumPartialDemangler demangler;
+      string name = fn_decl->getName().str();
+      if (!demangler.partialDemangle(name.c_str())) {
+        auto demangled_to_string = [](char* buffer){
+          string str;
+          if (buffer != nullptr) {
+            str = buffer;
+            std::free(buffer);
+          }
+          return str;  
+        };
+      
+        string base_name = demangled_to_string(demangler.getFunctionBaseName(nullptr, 0));
+        bool is_load_strided = base_name == "__emx_simd_load_strided";
+        bool is_load_indexed = base_name == "__emx_simd_load_indexed";
+        bool is_store_strided = base_name == "__emx_simd_store_strided";
+        bool is_store_indexed = base_name == "__emx_simd_store_indexed";
+        if (is_load_strided || is_load_indexed || is_store_strided || is_store_indexed) {
+          llvm::Type* vector_type = i.getType();
+          if (is_store_strided || is_store_indexed) {
+            vector_type = i.getArgOperand(1)->getType();
+          }
+          llvm::Type* element_type = cast<llvm::VectorType>(vector_type)->getElementType();
+          uint64_t align = DL().getABITypeAlign(element_type).value();
+
+          if (is_load_strided) {
+            return make_unique<EMXSimdLoadStrided>(
+              *ty, value_name(i),
+              *args.at(0),
+              *args.at(1),
+              align);
+          } else if (is_store_strided) {
+            return make_unique<EMXSimdStoreStrided>(
+              *args.at(0),
+              *args.at(1),
+              *args.at(2),
+              *args.at(3),
+              align);
+          } else if (is_load_indexed) {
+            return make_unique<EMXSimdLoadIndexed>(
+              *ty, value_name(i),
+              *args.at(0),
+              *args.at(1),
+              align);
+          } else if (is_store_indexed) {
+            return make_unique<EMXSimdStoreIndexed>(
+              *args.at(0),
+              *args.at(1),
+              *args.at(2),
+              *args.at(3),
+              align);
+          }
+        } else if (base_name == "__emx_simd_cond") {
+          // We extend the select instruction to handle conditions of type i8.
+          // Since this is not supported by LLVM, we encode it as a function call.
+          return make_unique<Select>(
+            *ty, value_name(i),
+            *args.at(0),
+            *args.at(1),
+            *args.at(2));
+        }
       }
 
       if (fn_decl->isVarArg())
