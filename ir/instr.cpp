@@ -1943,6 +1943,7 @@ StateValue Select::toSMT(State &s) const {
 
   auto scalar
     = [&](const auto &a, const auto &b, const auto &c, const Type &ty) {
+    // We extend the select instruction to accept conditions of type i8
     auto cond = c.value != 0;
     auto identity = [](const expr &x, auto &rm) { return x; };
     return fm_poison(s, expr::mkIf(cond, a.value, b.value),
@@ -1967,6 +1968,7 @@ StateValue Select::toSMT(State &s) const {
 }
 
 expr Select::getTypeConstraints(const Function &f) const {
+  // We extend the select instruction to accept conditions of type i8
   return Value::getTypeConstraints() &&
          (cond->getType().enforceIntOrVectorType(1) ||
           cond->getType().enforceIntOrVectorType(8)) &&

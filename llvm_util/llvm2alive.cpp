@@ -385,6 +385,10 @@ public:
       // (non-operand-bundle) version of @llvm.assume. its reason for
       // existing is that the optimizer is not free to remove
       // @llvm.assert, as it is @llvm.assume
+
+      // __emx_assume is an alias for llvm.assert which may be emitted by
+      // a C/C++ compiler. We use it when we need to encode an assumption
+      // which may not be used by LLVM's optimizer. 
       if (fn_decl->getName() == "llvm.assert" || fn_decl->getName() == "__emx_assume") {
         auto &ctx = i.getContext();
         assert(fn->getFunctionType() ==
@@ -392,7 +396,9 @@ public:
                                        { llvm::Type::getInt1Ty(ctx) }, false));
         return make_unique<Assume>(*args.at(0), Assume::AndNonPoison);
       }
-
+      
+      // Some custom instructions are generic. We use C++'s name mangling for
+      // the different overloads.
       llvm::ItaniumPartialDemangler demangler;
       string name = fn_decl->getName().str();
       if (!demangler.partialDemangle(name.c_str())) {
@@ -446,6 +452,8 @@ public:
               align);
           }
         } else if (base_name == "__emx_simd_cond") {
+          // We extend the select instruction to handle conditions of type i8.
+          // Since this is not supported by LLVM, we encode it as a function call.
           return make_unique<Select>(
             *ty, value_name(i),
             *args.at(0),
