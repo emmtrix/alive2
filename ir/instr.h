@@ -908,12 +908,12 @@ public:
     dup(Function &f, const std::string &suffix) const override;
 };
 
-class LoadStrided final : public MemInstr {
+class EMXSimdLoadStrided final : public MemInstr {
   Value *ptr;
   Value *stride;
   uint64_t align;
 public:
-  LoadStrided(Type &type, std::string &&name, Value &ptr, Value &stride, uint64_t align)
+  EMXSimdLoadStrided(Type &type, std::string &&name, Value &ptr, Value &stride, uint64_t align)
     : MemInstr(type, std::move(name)), ptr(&ptr), stride(&stride), align(align) {}
 
   Value& getPtr() const { return *ptr; }
@@ -934,12 +934,12 @@ public:
     dup(Function &f, const std::string &suffix) const override;
 };
 
-class LoadIndexed final : public MemInstr {
+class EMXSimdLoadIndexed final : public MemInstr {
   Value *ptr;
   Value *indices;
   uint64_t align;
 public:
-  LoadIndexed(Type &type, std::string &&name, Value &ptr, Value &indices, uint64_t align)
+  EMXSimdLoadIndexed(Type &type, std::string &&name, Value &ptr, Value &indices, uint64_t align)
     : MemInstr(type, std::move(name)), ptr(&ptr), indices(&indices), align(align) {}
 
   Value& getPtr() const { return *ptr; }
@@ -989,11 +989,11 @@ public:
     dup(Function &f, const std::string &suffix) const override;
 };
 
-class StoreStrided final : public MemInstr {
+class EMXSimdStoreStrided final : public MemInstr {
   Value *ptr, *val, *stride, *enable;
   uint64_t align;
 public:
-  StoreStrided(Value &ptr, Value &val, Value &stride, Value &enable, uint64_t align)
+  EMXSimdStoreStrided(Value &ptr, Value &val, Value &stride, Value &enable, uint64_t align)
     : MemInstr(Type::voidTy, "store.strided"), ptr(&ptr), val(&val), stride(&stride), enable(&enable), align(align) {}
 
   Value& getValue() const { return *val; }
@@ -1018,11 +1018,11 @@ public:
     dup(Function &f, const std::string &suffix) const override;
 };
 
-class StoreIndexed final : public MemInstr {
+class EMXSimdStoreIndexed final : public MemInstr {
   Value *ptr, *val, *indices, *enable;
   uint64_t align;
 public:
-  StoreIndexed(Value &ptr, Value &val, Value &indices, Value &enable, uint64_t align)
+  EMXSimdStoreIndexed(Value &ptr, Value &val, Value &indices, Value &enable, uint64_t align)
     : MemInstr(Type::voidTy, "store.indexed"), ptr(&ptr), val(&val), indices(&indices), enable(&enable), align(align) {}
 
   Value& getValue() const { return *val; }
