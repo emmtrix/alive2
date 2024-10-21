@@ -4108,6 +4108,7 @@ StateValue EMXSimdLoadStrided::toSMT(State &s) const {
   
   auto &element_type = getType().getAsAggregateType()->getChild(0);
   auto stride_val = s[*stride];
+  s.addUB(stride_val.non_poison);
 
   vector<StateValue> values;
   for (unsigned i = 0, e = getType().getAsAggregateType()->numElementsConst(); i != e; ++i) {
@@ -4297,6 +4298,7 @@ StateValue EMXSimdStoreStrided::toSMT(State &s) const {
   auto enable_agg = enable->getType().getAsAggregateType();
 
   auto stride_val = s[*stride];
+  s.addUB(stride_val.non_poison);
 
   for (unsigned i = 0, e = value_agg->numElementsConst(); i != e; ++i) {
     Pointer pointer(s.getMemory(), base_pointer);
