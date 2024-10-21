@@ -4131,7 +4131,8 @@ expr EMXSimdLoadStrided::getTypeConstraints(const Function &f) const {
 }
 
 unique_ptr<Instr> EMXSimdLoadStrided::dup(Function &f, const string &suffix) const {
-  return make_unique<EMXSimdLoadStrided>(getType(), getName() + suffix, *ptr, *stride, align);
+  return make_unique<EMXSimdLoadStrided>(getType(), getName() + suffix,
+                                         *ptr, *stride, align);
 }
 
 DEFINE_AS_RETZEROALIGN(EMXSimdLoadIndexed, getMaxAllocSize);
@@ -4197,7 +4198,8 @@ expr EMXSimdLoadIndexed::getTypeConstraints(const Function &f) const {
 }
 
 unique_ptr<Instr> EMXSimdLoadIndexed::dup(Function &f, const string &suffix) const {
-  return make_unique<EMXSimdLoadIndexed>(getType(), getName() + suffix, *ptr, *indices, align);
+  return make_unique<EMXSimdLoadIndexed>(getType(), getName() + suffix,
+                                         *ptr, *indices, align);
 }
 
 
@@ -4305,7 +4307,9 @@ StateValue EMXSimdStoreStrided::toSMT(State &s) const {
     pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
 
     auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
-    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), align, s.getUndefVars(), enable_store);
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i),
+                        value_agg->getChild(i), align, s.getUndefVars(),
+                        enable_store);
   }
 
   return {};
@@ -4376,7 +4380,9 @@ StateValue EMXSimdStoreIndexed::toSMT(State &s) const {
     pointer += index.sextOrTrunc(bits_for_offset);
 
     auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
-    s.getMemory().store(pointer(), value_agg->extract(value_vec, i), value_agg->getChild(i), align, s.getUndefVars(), enable_store);
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i),
+                        value_agg->getChild(i), align, s.getUndefVars(),
+                        enable_store);
   }
 
   return {};
