@@ -1299,7 +1299,6 @@ void Memory::storeLambda(const Pointer &ptr, const expr &offset,
         for (uint64_t i = 0; i < n; i++) {
           Pointer pointer = ptr;
           pointer += expr::mkUInt(i, Pointer::bitsShortOffset());
-          ;
           blk.store_offsets->insert(pointer.getShortOffset());
         }
       } else {
