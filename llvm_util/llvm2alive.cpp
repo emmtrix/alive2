@@ -576,7 +576,8 @@ public:
 
     return make_unique<Memset>(*ptr, *val, *bytes,
                                i.getDestAlign().valueOrOne().value(),
-                               i.isTailCall());
+                               i.isTailCall(),
+                               i.hasMetadata("emx.padding"));
   }
 
   RetTy visitMemTransferInst(llvm::MemTransferInst &i) {
@@ -1531,6 +1532,10 @@ public:
       default:
         // non-relevant for correctness
         if (ID == Node->getContext().getMDKindID("irce.loop.clone"))
+          break;
+
+        // Handled by memset
+        if (ID == Node->getContext().getMDKindID("emx.padding"))
           break;
 
         // For the target, dropping metadata is fine as metadata will never turn
