@@ -1182,7 +1182,8 @@ Memory::DataType Memory::data_type(const vector<pair<unsigned, expr>> &data,
 
 void Memory::store(const Pointer &ptr,
                    const vector<pair<unsigned, expr>> &data,
-                   const set<expr> &undef, uint64_t align) {
+                   const set<expr> &undef, uint64_t align,
+                   const expr &enable) {
   if (data.empty())
     return;
 
@@ -1234,7 +1235,7 @@ void Memory::store(const Pointer &ptr,
         = offset + expr::mkUInt(idx >> Pointer::zeroBitsShortOffset(), offset);
       mem = mk_store(std::move(mem), off, val);
     }
-    blk.val = mk_block_if(cond, std::move(mem), std::move(blk.val));
+    blk.val = mk_block_if(cond && enable, std::move(mem), std::move(blk.val));
     blk.undef.insert(undef.begin(), undef.end());
   };
 
@@ -2193,7 +2194,8 @@ void Memory::store(const StateValue &v, const Type &type, unsigned offset0,
 }
 
 void Memory::store(const expr &p, const StateValue &v, const Type &type,
-                   uint64_t align, const set<expr> &undef_vars) {
+                   uint64_t align, const set<expr> &undef_vars,
+                   const expr &enable) {
   assert(!memory_unused());
   Pointer ptr(*this, p);
 
@@ -2203,7 +2205,7 @@ void Memory::store(const expr &p, const StateValue &v, const Type &type,
 
   vector<pair<unsigned, expr>> to_store;
   store(v, type, 0, to_store);
-  store(ptr, to_store, undef_vars, align);
+  store(ptr, to_store, undef_vars, align, enable);
 }
 
 StateValue Memory::load(const Pointer &ptr, const Type &type, set<expr> &undef,

@@ -1943,7 +1943,9 @@ StateValue Select::toSMT(State &s) const {
 
   auto scalar
     = [&](const auto &a, const auto &b, const auto &c, const Type &ty) {
-    auto cond = c.value == 1;
+    // We extend the select instruction to accept conditions of type i8
+    // This enables us to reuse LLVM's select instruction to implement __emx_cond
+    auto cond = c.value != 0;
     auto identity = [](const expr &x, auto &rm) { return x; };
     return fm_poison(s, expr::mkIf(cond, a.value, b.value),
                      c.non_poison &&
@@ -1967,8 +1969,11 @@ StateValue Select::toSMT(State &s) const {
 }
 
 expr Select::getTypeConstraints(const Function &f) const {
+  // We extend the select instruction to accept conditions of type i8
+  // This enables us to reuse LLVM's select instruction to implement __emx_cond
   return Value::getTypeConstraints() &&
-         cond->getType().enforceIntOrVectorType(1) &&
+         (cond->getType().enforceIntOrVectorType(1) ||
+          cond->getType().enforceIntOrVectorType(8)) &&
          getType().enforceVectorTypeIff(cond->getType()) &&
          (fmath.isNone() ? expr(true) : getType().enforceFloatOrVectorType()) &&
          getType() == a->getType() &&
@@ -4069,6 +4074,142 @@ unique_ptr<Instr> Load::dup(Function &f, const string &suffix) const {
   return make_unique<Load>(getType(), getName() + suffix, *ptr, align);
 }
 
+DEFINE_AS_RETZEROALIGN(EMXSimdLoadStrided, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdLoadStrided, getMaxGEPOffset);
+
+uint64_t EMXSimdLoadStrided::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo EMXSimdLoadStrided::getByteAccessInfo() const {
+  return ByteAccessInfo::get(getType(), false, align);
+}
+
+vector<Value*> EMXSimdLoadStrided::operands() const {
+  return { ptr, stride };
+}
+
+bool EMXSimdLoadStrided::propagatesPoison() const {
+  return true;
+}
+
+void EMXSimdLoadStrided::rauw(const Value &what, Value &with) {
+  RAUW(ptr);
+  RAUW(stride);
+}
+
+void EMXSimdLoadStrided::print(ostream &os) const {
+  os << getName() << " = emx.simd.load_strided " << getType() << ", " << *ptr
+     << ", stride " << *stride
+     << ", align " << align;
+}
+
+StateValue EMXSimdLoadStrided::toSMT(State &s) const {
+  // Based on Load::toSMT
+
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, base_pointer);
+  
+  auto &element_type = getType().getAsAggregateType()->getChild(0);
+  auto stride_val = s[*stride];
+  s.addUB(stride_val.non_poison);
+
+  vector<StateValue> values;
+  for (unsigned i = 0, e = getType().getAsAggregateType()->numElementsConst(); i != e; ++i) {
+    Pointer pointer(s.getMemory(), base_pointer);
+    pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
+
+    auto [value, ub] = s.getMemory().load(pointer(), element_type, align);
+    s.addUB(std::move(ub));
+    values.emplace_back(value);
+  }
+
+  return getType().getAsAggregateType()->aggregateVals(values);
+}
+
+expr EMXSimdLoadStrided::getTypeConstraints(const Function &f) const {
+  return Value::getTypeConstraints() &&
+         getType().enforceVectorType() &&
+         ptr->getType().enforcePtrType() &&
+         stride->getType().enforceIntType();
+}
+
+unique_ptr<Instr> EMXSimdLoadStrided::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdLoadStrided>(getType(), getName() + suffix,
+                                         *ptr, *stride, align);
+}
+
+DEFINE_AS_RETZEROALIGN(EMXSimdLoadIndexed, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdLoadIndexed, getMaxGEPOffset);
+
+uint64_t EMXSimdLoadIndexed::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo EMXSimdLoadIndexed::getByteAccessInfo() const {
+  return ByteAccessInfo::get(getType(), false, align);
+}
+
+vector<Value*> EMXSimdLoadIndexed::operands() const {
+  return { ptr, indices };
+}
+
+bool EMXSimdLoadIndexed::propagatesPoison() const {
+  return true;
+}
+
+void EMXSimdLoadIndexed::rauw(const Value &what, Value &with) {
+  RAUW(ptr);
+  RAUW(indices);
+}
+
+void EMXSimdLoadIndexed::print(ostream &os) const {
+  os << getName() << " = emx.simd.load_indexed " << getType() << ", " << *ptr
+     << ", indices " << *indices
+     << ", align " << align;
+}
+
+StateValue EMXSimdLoadIndexed::toSMT(State &s) const {
+  // Based on Load::toSMT
+
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_load(s, base_pointer);
+  
+  auto &element_type = getType().getAsAggregateType()->getChild(0);
+
+  auto indices_vec = s[*indices];
+  auto indices_agg = indices->getType().getAsAggregateType();
+  vector<StateValue> values;
+  
+  for (unsigned i = 0, e = indices_agg->numElementsConst(); i != e; ++i) {
+    auto [index, index_poison] = indices_agg->extract(indices_vec, i);
+    s.addUB(std::move(index_poison));
+
+    Pointer pointer(s.getMemory(), base_pointer);
+    // Use a sign extend (instead of zero extend) for consistency
+    // with getelementptr. Consistency improves solver performance.
+    pointer += index.sextOrTrunc(bits_for_offset);
+
+    auto [value, ub] = s.getMemory().load(pointer(), element_type, align);
+    s.addUB(std::move(ub));
+    values.emplace_back(value);
+  }
+
+  return getType().getAsAggregateType()->aggregateVals(values);
+}
+
+expr EMXSimdLoadIndexed::getTypeConstraints(const Function &f) const {
+  return Value::getTypeConstraints() &&
+         getType().enforceVectorType() &&
+         ptr->getType().enforcePtrType() &&
+         indices->getType().enforceVectorType();
+}
+
+unique_ptr<Instr> EMXSimdLoadIndexed::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdLoadIndexed>(getType(), getName() + suffix,
+                                         *ptr, *indices, align);
+}
+
 
 DEFINE_AS_RETZEROALIGN(Store, getMaxAllocSize);
 DEFINE_AS_RETZERO(Store, getMaxGEPOffset);
@@ -4120,6 +4261,155 @@ expr Store::getTypeConstraints(const Function &f) const {
 
 unique_ptr<Instr> Store::dup(Function &f, const string &suffix) const {
   return make_unique<Store>(*ptr, *val, align);
+}
+
+
+DEFINE_AS_RETZEROALIGN(EMXSimdStoreStrided, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdStoreStrided, getMaxGEPOffset);
+
+uint64_t EMXSimdStoreStrided::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo EMXSimdStoreStrided::getByteAccessInfo() const {
+  return ByteAccessInfo::get(val->getType(), true, align);
+}
+
+vector<Value*> EMXSimdStoreStrided::operands() const {
+  return { val, ptr, stride, enable };
+}
+
+bool EMXSimdStoreStrided::propagatesPoison() const {
+  return false;
+}
+
+void EMXSimdStoreStrided::rauw(const Value &what, Value &with) {
+  RAUW(val);
+  RAUW(ptr);
+  RAUW(stride);
+  RAUW(enable);
+}
+
+void EMXSimdStoreStrided::print(ostream &os) const {
+  os << "emx.simd.store_strided " << *val << ", " << *ptr
+     << ", stride " << *stride
+     << ", enable " << *enable
+     << ", align " << align;
+}
+
+StateValue EMXSimdStoreStrided::toSMT(State &s) const {
+  // Based on Store::toSMT
+
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_store(s, base_pointer);
+  
+  auto value_vec = s[*val];
+  auto value_agg = val->getType().getAsAggregateType();
+
+  auto enable_vec = s[*enable];
+  auto enable_agg = enable->getType().getAsAggregateType();
+
+  auto stride_val = s[*stride];
+  s.addUB(stride_val.non_poison);
+
+  for (unsigned i = 0, e = value_agg->numElementsConst(); i != e; ++i) {
+    Pointer pointer(s.getMemory(), base_pointer);
+    pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
+
+    auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i),
+                        value_agg->getChild(i), align, s.getUndefVars(),
+                        enable_store);
+  }
+
+  return {};
+}
+
+expr EMXSimdStoreStrided::getTypeConstraints(const Function &f) const {
+  return ptr->getType().enforcePtrType() &&
+         stride->getType().enforceIntType() &&
+         enable->getType().enforceVectorType();
+}
+
+unique_ptr<Instr> EMXSimdStoreStrided::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdStoreStrided>(*ptr, *val, *stride, *enable, align);
+}
+
+
+DEFINE_AS_RETZEROALIGN(EMXSimdStoreIndexed, getMaxAllocSize);
+DEFINE_AS_RETZERO(EMXSimdStoreIndexed, getMaxGEPOffset);
+
+uint64_t EMXSimdStoreIndexed::getMaxAccessSize() const {
+  return UINT64_MAX;
+}
+
+MemInstr::ByteAccessInfo EMXSimdStoreIndexed::getByteAccessInfo() const {
+  return ByteAccessInfo::get(val->getType(), true, align);
+}
+
+vector<Value*> EMXSimdStoreIndexed::operands() const {
+  return { val, ptr, indices, enable };
+}
+
+bool EMXSimdStoreIndexed::propagatesPoison() const {
+  return false;
+}
+
+void EMXSimdStoreIndexed::rauw(const Value &what, Value &with) {
+  RAUW(val);
+  RAUW(ptr);
+  RAUW(indices);
+  RAUW(enable);
+}
+
+void EMXSimdStoreIndexed::print(ostream &os) const {
+  os << "emx.simd.store_indexed " << *val << ", " << *ptr
+     << ", indices " << *indices
+     << ", enable " << *enable
+     << ", align " << align;
+}
+
+StateValue EMXSimdStoreIndexed::toSMT(State &s) const {
+  // Based on Store::toSMT
+
+  auto &base_pointer = s.getWellDefinedPtr(*ptr);
+  check_can_store(s, base_pointer);
+  
+  auto value_vec = s[*val];
+  auto value_agg = val->getType().getAsAggregateType();
+
+  auto indices_vec = s[*indices];
+  auto indices_agg = indices->getType().getAsAggregateType();
+
+  auto enable_vec = s[*enable];
+  auto enable_agg = enable->getType().getAsAggregateType();
+
+  for (unsigned i = 0, e = indices_agg->numElementsConst(); i != e; ++i) {
+    auto [index, index_poison] = indices_agg->extract(indices_vec, i);
+    s.addUB(std::move(index_poison));
+
+    Pointer pointer(s.getMemory(), base_pointer);
+    // Use a sign extend (instead of zero extend) for consistency
+    // with getelementptr. Consistency improves solver performance.
+    pointer += index.sextOrTrunc(bits_for_offset);
+
+    auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
+    s.getMemory().store(pointer(), value_agg->extract(value_vec, i),
+                        value_agg->getChild(i), align, s.getUndefVars(),
+                        enable_store);
+  }
+
+  return {};
+}
+
+expr EMXSimdStoreIndexed::getTypeConstraints(const Function &f) const {
+  return ptr->getType().enforcePtrType() &&
+         indices->getType().enforceVectorType() &&
+         enable->getType().enforceVectorType();
+}
+
+unique_ptr<Instr> EMXSimdStoreIndexed::dup(Function &f, const string &suffix) const {
+  return make_unique<EMXSimdStoreIndexed>(*ptr, *val, *indices, *enable, align);
 }
 
 
