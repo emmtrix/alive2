@@ -1059,7 +1059,8 @@ class Memset final : public MemInstr {
   bool is_padding;
 
 public:
-  Memset(Value &ptr, Value &val, Value &bytes, uint64_t align, TailCallInfo tci)
+  Memset(Value &ptr, Value &val, Value &bytes, uint64_t align, TailCallInfo tci,
+         bool is_padding)
       : MemInstr(Type::voidTy, "memset"), ptr(&ptr), val(&val), bytes(&bytes),
         align(align), tci(tci), is_padding(is_padding) {}
 
