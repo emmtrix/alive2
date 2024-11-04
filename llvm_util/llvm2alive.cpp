@@ -613,8 +613,12 @@ public:
     default:
       UNREACHABLE();
     }
+    bool has_same_sign = false;
+    #if LLVM_VERSION_MAJOR > 14
+    has_same_sign = i.hasSameSign() ? ICmp::SameSign : ICmp::None;
+    #endif
     return make_unique<ICmp>(*ty, value_name(i), cond, *a, *b,
-                             i.hasSameSign() ? ICmp::SameSign : ICmp::None);
+                             has_same_sign);
   }
 
   RetTy visitFCmpInst(llvm::FCmpInst &i) {
