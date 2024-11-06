@@ -1,8 +1,6 @@
 declare noundef <2 x i32> @_Z23__emx_simd_load_indexedPiDv2_l(i32* noundef, <2 x i64> noundef)
 
-; Out of bounds load should result in poison for the relevant lanes
-
-; Only contains a single float
+; Only contains a single i32
 @data = external global i32, align 4
 
 define <2 x i32> @src() {
