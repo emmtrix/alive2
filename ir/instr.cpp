@@ -4099,9 +4099,11 @@ StateValue EMXSimdLoadStrided::toSMT(State &s) const {
     Pointer pointer(s.getMemory(), base_pointer);
     pointer += stride_val.value * expr::mkUInt(i, stride_val.value);
 
+    // Out of bounds load results in poison, but does not trigger UB
     auto [value, ub] = s.getMemory().load(pointer(), element_type, align);
-    s.addUB(std::move(ub));
-    values.emplace_back(value);
+    s.addGuardableUB(std::move(ub.second));
+    values.emplace_back(std::move(value.value),
+                        std::move(value.non_poison) && std::move(ub.first)());
   }
 
   return getType().getAsAggregateType()->aggregateVals(values);
@@ -4170,9 +4172,11 @@ StateValue EMXSimdLoadIndexed::toSMT(State &s) const {
     // with getelementptr. Consistency improves solver performance.
     pointer += index.sextOrTrunc(bits_for_offset);
 
+    // Out of bounds load results in poison, but does not trigger UB
     auto [value, ub] = s.getMemory().load(pointer(), element_type, align);
-    s.addUB(std::move(ub));
-    values.emplace_back(value);
+    s.addGuardableUB(std::move(ub.second));
+    values.emplace_back(std::move(value.value),
+                        std::move(value.non_poison) && std::move(ub.first)());
   }
 
   return getType().getAsAggregateType()->aggregateVals(values);
