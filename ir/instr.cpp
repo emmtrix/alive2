@@ -1944,6 +1944,7 @@ StateValue Select::toSMT(State &s) const {
   auto scalar
     = [&](const auto &a, const auto &b, const auto &c, const Type &ty) {
     // We extend the select instruction to accept conditions of type i8
+    // This enables us to reuse LLVM's select instruction to implement __emx_cond
     auto cond = c.value != 0;
     auto identity = [](const expr &x, auto &rm) { return x; };
     return fm_poison(s, expr::mkIf(cond, a.value, b.value),
@@ -1969,6 +1970,7 @@ StateValue Select::toSMT(State &s) const {
 
 expr Select::getTypeConstraints(const Function &f) const {
   // We extend the select instruction to accept conditions of type i8
+  // This enables us to reuse LLVM's select instruction to implement __emx_cond
   return Value::getTypeConstraints() &&
          (cond->getType().enforceIntOrVectorType(1) ||
           cond->getType().enforceIntOrVectorType(8)) &&
@@ -4083,6 +4085,8 @@ void EMXSimdLoadStrided::print(ostream &os) const {
 }
 
 StateValue EMXSimdLoadStrided::toSMT(State &s) const {
+  // Based on Load::toSMT
+
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_load(s, base_pointer);
   
@@ -4146,6 +4150,8 @@ void EMXSimdLoadIndexed::print(ostream &os) const {
 }
 
 StateValue EMXSimdLoadIndexed::toSMT(State &s) const {
+  // Based on Load::toSMT
+
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_load(s, base_pointer);
   
@@ -4160,6 +4166,8 @@ StateValue EMXSimdLoadIndexed::toSMT(State &s) const {
     s.addUB(std::move(index_poison));
 
     Pointer pointer(s.getMemory(), base_pointer);
+    // Use a sign extend (instead of zero extend) for consistency
+    // with getelementptr. Consistency improves solver performance.
     pointer += index.sextOrTrunc(bits_for_offset);
 
     auto [value, ub] = s.getMemory().load(pointer(), element_type, align);
@@ -4270,10 +4278,12 @@ void EMXSimdStoreStrided::print(ostream &os) const {
 }
 
 StateValue EMXSimdStoreStrided::toSMT(State &s) const {
+  // Based on Store::toSMT
+
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_store(s, base_pointer);
   
-  auto &value_vec = s[*val];
+  auto value_vec = s[*val];
   auto value_agg = val->getType().getAsAggregateType();
 
   auto enable_vec = s[*enable];
@@ -4340,10 +4350,12 @@ void EMXSimdStoreIndexed::print(ostream &os) const {
 }
 
 StateValue EMXSimdStoreIndexed::toSMT(State &s) const {
+  // Based on Store::toSMT
+
   auto &base_pointer = s.getWellDefinedPtr(*ptr);
   check_can_store(s, base_pointer);
   
-  auto &value_vec = s[*val];
+  auto value_vec = s[*val];
   auto value_agg = val->getType().getAsAggregateType();
 
   auto indices_vec = s[*indices];
@@ -4357,6 +4369,8 @@ StateValue EMXSimdStoreIndexed::toSMT(State &s) const {
     s.addUB(std::move(index_poison));
 
     Pointer pointer(s.getMemory(), base_pointer);
+    // Use a sign extend (instead of zero extend) for consistency
+    // with getelementptr. Consistency improves solver performance.
     pointer += index.sextOrTrunc(bits_for_offset);
 
     auto enable_store = enable_agg->extract(enable_vec, i).value != 0;
