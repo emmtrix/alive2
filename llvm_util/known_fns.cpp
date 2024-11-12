@@ -616,13 +616,13 @@ known_call(llvm::CallInst &i, const llvm::TargetLibraryInfo &TLI,
 
   case llvm::LibFunc_exp2:
   case llvm::LibFunc_exp2f:
-    RETURN_VAL(make_unique<FpBinOp>(*ty, value_name(i), *args[0], *args[1],
-                                    FpBinOp::Exp2, parse_fmath(i)));
+    RETURN_VAL(make_unique<FpUnaryOp>(*ty, value_name(i), *args[0],
+                                      FpUnaryOp::Exp2, parse_fmath(i)));
 
   case llvm::LibFunc_log2:
   case llvm::LibFunc_log2f:
-    RETURN_VAL(make_unique<FpBinOp>(*ty, value_name(i), *args[0], *args[1],
-                                    FpBinOp::Log2, parse_fmath(i)));
+    RETURN_VAL(make_unique<FpUnaryOp>(*ty, value_name(i), *args[0],
+                                      FpUnaryOp::Log2, parse_fmath(i)));
 
   case llvm::LibFunc_fwrite: {
     auto size = getInt(*args[1]);
