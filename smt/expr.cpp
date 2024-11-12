@@ -1437,6 +1437,14 @@ expr expr::operator&(const expr &rhs) const {
   if (isAllOnes() || rhs.isZero())
     return rhs;
 
+  {
+    expr lhsVal, rhsVal;
+    if (isSignExt(lhsVal) && rhs.isSignExt(rhsVal) &&
+        lhsVal.bits() == rhsVal.bits()) {
+      return (lhsVal & rhsVal).sext(bits() - lhsVal.bits());
+    }
+  }
+
   auto fold_extract = [](auto &a, auto &b) {
     uint64_t n;
     if (!a.isUInt(n) || n == 0 || n == numeric_limits<uint64_t>::max())
@@ -1482,6 +1490,14 @@ expr expr::operator|(const expr &rhs) const {
   if (isZero() || rhs.isAllOnes())
     return rhs;
 
+  {
+    expr lhsVal, rhsVal;
+    if (isSignExt(lhsVal) && rhs.isSignExt(rhsVal) &&
+        lhsVal.bits() == rhsVal.bits()) {
+      return (lhsVal | rhsVal).sext(bits() - lhsVal.bits());
+    }
+  }
+
   if (bits() == 1) {
     if (auto a = get_bool(*this);
         a.isValid())
@@ -1500,6 +1516,15 @@ expr expr::operator^(const expr &rhs) const {
     return bits() == 1 ? (rhs == 0).toBVBool() : ~rhs;
   if (rhs.isAllOnes())
     return bits() == 1 ? (*this == 0).toBVBool() : ~*this;
+
+  {
+    expr lhsVal, rhsVal;
+    if (isSignExt(lhsVal) && rhs.isSignExt(rhsVal) &&
+        lhsVal.bits() == rhsVal.bits()) {
+      return (lhsVal ^ rhsVal).sext(bits() - lhsVal.bits());
+    }
+  }
+
   return binopc(Z3_mk_bvxor, operator^, Z3_OP_BXOR, isZero, alwaysFalse);
 }
 
@@ -1517,6 +1542,11 @@ expr expr::operator!() const {
 }
 
 expr expr::operator~() const {
+  expr val;
+  if (isSignExt(val)) {
+    return (~val).sext(bits() - val.bits());
+  }
+
   return unop_fold(Z3_mk_bvnot);
 }
 
