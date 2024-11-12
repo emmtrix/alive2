@@ -1121,6 +1121,8 @@ void FpUnaryOp::print(ostream &os) const {
   case RoundEven:    str = "roundeven "; break;
   case Trunc:        str = "trunc "; break;
   case Sqrt:         str = "sqrt "; break;
+  case Exp2:         str = "exp2 "; break;
+  case Log2:         str = "log2 "; break;
   }
 
   os << getName() << " = " << str << fmath << *val;
@@ -1168,6 +1170,12 @@ StateValue FpUnaryOp::toSMT(State &s) const {
     break;
   case Sqrt:
     fn = [](const expr &v, const expr &rm) { return v.sqrt(rm); };
+    break;
+  case Exp2:
+    fn = [](const expr &v, const expr &rm) { return v.exp2(rm); };
+    break;
+  case Log2:
+    fn = [](const expr &v, const expr &rm) { return v.log2(rm); };
     break;
   }
 

@@ -244,6 +244,8 @@ public:
   expr fneg() const;
   expr copysign(const expr &sign) const;
   expr sqrt(const expr &rm) const;
+  expr exp2(const expr &rm) const;
+  expr log2(const expr &rm) const;
 
   static expr fma(const expr &a, const expr &b, const expr &c, const expr &rm);
 
