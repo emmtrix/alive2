@@ -1192,6 +1192,10 @@ public:
     case llvm::Intrinsic::experimental_constrained_sqrt:
     case llvm::Intrinsic::trunc:
     case llvm::Intrinsic::experimental_constrained_trunc:
+    case llvm::Intrinsic::exp2:
+    case llvm::Intrinsic::experimental_constrained_exp2:
+    case llvm::Intrinsic::log2:
+    case llvm::Intrinsic::experimental_constrained_log2:
     {
       PARSE_UNOP();
       FpUnaryOp::Op op;
@@ -1214,6 +1218,10 @@ public:
       case llvm::Intrinsic::experimental_constrained_sqrt:      op = FpUnaryOp::Sqrt; break;
       case llvm::Intrinsic::trunc:
       case llvm::Intrinsic::experimental_constrained_trunc:     op = FpUnaryOp::Trunc; break;
+      case llvm::Intrinsic::exp2:
+      case llvm::Intrinsic::experimental_constrained_exp2:      op = FpUnaryOp::Exp2; break;
+      case llvm::Intrinsic::log2:
+      case llvm::Intrinsic::experimental_constrained_log2:      op = FpUnaryOp::Log2; break;
       default: UNREACHABLE();
       }
       ret = make_unique<FpUnaryOp>(*ty, value_name(i), *val, op, parse_fmath(i),

@@ -130,7 +130,7 @@ class FpUnaryOp final : public Instr {
 public:
   enum Op {
     FAbs, FNeg, Canonicalize, Ceil, Floor, RInt, NearbyInt, Round, RoundEven,
-    Trunc, Sqrt
+    Trunc, Sqrt, Exp2, Log2
   };
 
 private:

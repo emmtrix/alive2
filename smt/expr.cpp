@@ -1333,6 +1333,16 @@ expr expr::sqrt(const expr &rm) const {
   return simplify_const(Z3_mk_fpa_sqrt(ctx(), rm(), ast()), *this);
 }
 
+expr expr::exp2(const expr &rm) const {
+  C(rm);
+  return uf_float("exp2", {*this, rm}, *this);
+}
+
+expr expr::log2(const expr &rm) const {
+  C(rm);
+  return uf_float("log2", {*this, rm}, *this);
+}
+
 expr expr::fma(const expr &a, const expr &b, const expr &c, const expr &rm) {
   C2(a, b, c, rm);
   if (get_uf_float())
