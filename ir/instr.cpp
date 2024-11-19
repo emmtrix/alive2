@@ -4152,8 +4152,6 @@ void Memset::rauw(const Value &what, Value &with) {
 }
 
 void Memset::print(ostream &os) const {
-  if (is_padding)
-    os << "padding ";
   os << (isTailCall() ? "tail " : "") << "memset " << *ptr
      << " align " << align << ", " << *val << ", " << *bytes;
 }
@@ -4179,7 +4177,7 @@ StateValue Memset::toSMT(State &s) const {
     check_tailcall(*this, s);
 
   s.getMemory().memset(vptr, s[*val].zextOrTrunc(8), vbytes, align,
-                       s.getUndefVars(), true, is_padding);
+                       s.getUndefVars());
   return {};
 }
 
@@ -4190,7 +4188,7 @@ expr Memset::getTypeConstraints(const Function &f) const {
 }
 
 unique_ptr<Instr> Memset::dup(Function &f, const string &suffix) const {
-  return make_unique<Memset>(*ptr, *val, *bytes, align, is_tailcall, is_padding);
+  return make_unique<Memset>(*ptr, *val, *bytes, align, is_tailcall);
 }
 
 
