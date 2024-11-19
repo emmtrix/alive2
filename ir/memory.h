@@ -139,6 +139,8 @@ class Memory {
     std::set<smt::expr> undef;
     unsigned char type = DATA_ANY;
 
+    std::optional<std::set<smt::expr>> store_offsets = std::set<smt::expr>();
+
     MemBlock() {}
     MemBlock(smt::expr &&val) : val(std::move(val)) {}
     MemBlock(smt::expr &&val, DataType type)
