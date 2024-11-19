@@ -524,7 +524,7 @@ known_call(llvm::CallInst &i, const llvm::TargetLibraryInfo &TLI,
 
   switch (libfn) {
   case llvm::LibFunc_memset: // void* memset(void *ptr, int val, size_t bytes)
-    BB.addInstr(make_unique<Memset>(*args[0], *args[1], *args[2], 1, tci, false));
+    BB.addInstr(make_unique<Memset>(*args[0], *args[1], *args[2], 1, tci));
     RETURN_VAL(make_unique<UnaryOp>(*ty, value_name(i), *args[0],
                                     UnaryOp::Copy));
 

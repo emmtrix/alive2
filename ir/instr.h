@@ -1056,19 +1056,16 @@ class Memset final : public MemInstr {
   Value *ptr, *val, *bytes;
   uint64_t align;
   TailCallInfo tci;
-  bool is_padding;
 
 public:
-  Memset(Value &ptr, Value &val, Value &bytes, uint64_t align, TailCallInfo tci,
-         bool is_padding)
+  Memset(Value &ptr, Value &val, Value &bytes, uint64_t align, TailCallInfo tci)
       : MemInstr(Type::voidTy, "memset"), ptr(&ptr), val(&val), bytes(&bytes),
-        align(align), tci(tci), is_padding(is_padding) {}
+        align(align), tci(tci) {}
 
   Value& getPtr() const { return *ptr; }
   Value& getBytes() const { return *bytes; }
   uint64_t getAlign() const { return align; }
   void setAlign(uint64_t align) { this->align = align; }
-  bool isPadding() const { return is_padding; }
 
   std::pair<uint64_t, uint64_t> getMaxAllocSize() const override;
   uint64_t getMaxAccessSize() const override;
